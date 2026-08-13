@@ -5,6 +5,8 @@ import handler from "vinext/server/app-router-entry";
 interface Env {
   ASSETS: Fetcher;
   DB: D1Database;
+  MARKET_SERVICE_URL?: string;
+  MARKET_SERVICE_TOKEN?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -27,7 +29,14 @@ interface ExecutionContext {
 
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    (globalThis as typeof globalThis & { __ARB_OASIS_DB?: D1Database }).__ARB_OASIS_DB = env.DB;
+    const runtime = globalThis as typeof globalThis & {
+      __ARB_OASIS_DB?: D1Database;
+      __ARB_OASIS_MARKET_SERVICE_URL?: string;
+      __ARB_OASIS_MARKET_SERVICE_TOKEN?: string;
+    };
+    runtime.__ARB_OASIS_DB = env.DB;
+    runtime.__ARB_OASIS_MARKET_SERVICE_URL = env.MARKET_SERVICE_URL;
+    runtime.__ARB_OASIS_MARKET_SERVICE_TOKEN = env.MARKET_SERVICE_TOKEN;
     const url = new URL(request.url);
 
     if (url.pathname === "/_vinext/image") {

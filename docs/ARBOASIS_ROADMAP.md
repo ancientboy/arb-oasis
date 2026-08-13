@@ -80,8 +80,10 @@ The browser localStorage research history is temporary. The next major milestone
 
 ### 1. Backend collector service
 
-Initial browser-to-backend snapshot collector and server-side public-market gateway
-implemented. A continuously running independent collector remains incomplete.
+An always-on independent collector with bounded upstream requests, per-source health,
+last-known-good caching and an authenticated Site gateway is implemented under
+`services/market-data`. Production server deployment and Site environment binding
+remain incomplete.
 
 Collect public market data continuously from Binance, Bitget and Gate.
 

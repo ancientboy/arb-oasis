@@ -1,0 +1,16 @@
+services:
+  market-data:
+    build:
+      context: ../services/market-data
+    restart: unless-stopped
+    environment:
+      PORT: "8787"
+      MARKET_SERVICE_TOKEN: "${MARKET_SERVICE_TOKEN}"
+      UPSTREAM_TIMEOUT_MS: "12000"
+    ports:
+      - "127.0.0.1:8787:8787"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8787/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 4

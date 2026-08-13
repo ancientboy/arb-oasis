@@ -47,6 +47,8 @@ Current important modules:
 - `src/history.js` — local research history and funding statistics
 - `src/app.js` — application state and UI wiring
 - `index.html` / `styles.css` — browser dashboard
+- `services/market-data` — always-on public-market collector and last-known-good cache
+- `app/api/market/route.ts` — same-origin gateway; prefers the collector when configured
 
 ## 3. Current Data Model
 
@@ -245,3 +247,7 @@ Research / requirement decision
 ```
 
 The deployed Site is an output artifact. GitHub `main` remains the source of truth.
+
+The Site runtime must set `MARKET_SERVICE_URL` (and `MARKET_SERVICE_TOKEN`) to an
+HTTPS endpoint for `services/market-data`. Direct exchange access from the Site is
+only a development/degraded fallback because edge-region restrictions can block it.

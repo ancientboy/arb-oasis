@@ -21,13 +21,25 @@ export async function GET(request: Request) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12_000);
   try {
-    const response = await fetch(upstream.url, {
+    const runtime = globalThis as typeof globalThis & {
+      __ARB_OASIS_MARKET_SERVICE_URL?: string;
+      __ARB_OASIS_MARKET_SERVICE_TOKEN?: string;
+    };
+    const serviceBase = runtime.__ARB_OASIS_MARKET_SERVICE_URL?.replace(/\/$/, "");
+    const target = serviceBase ? `${serviceBase}/v1/source/${encodeURIComponent(source)}` : upstream.url;
+    const response = await fetch(target, {
       cache: "no-store",
       signal: controller.signal,
-      headers: { accept: "application/json", "user-agent": "ArbOasis/1.0 market-research" },
+      headers: {
+        accept: "application/json",
+        "user-agent": "ArbOasis/1.0 market-research",
+        ...(serviceBase && runtime.__ARB_OASIS_MARKET_SERVICE_TOKEN
+          ? { authorization: `Bearer ${runtime.__ARB_OASIS_MARKET_SERVICE_TOKEN}` }
+          : {}),
+      },
     });
     const body = await response.text();
-    if (!response.ok) return Response.json({ error: source + " upstream returned " + response.status }, { status: 502 });
+    if (!response.ok) return Response.json({ error: source + " upstream returned " + response.status, backend: serviceBase ? "collector" : "edge-direct" }, { status: 502 });
     JSON.parse(body);
     const entry = {
       body,
@@ -36,11 +48,11 @@ export async function GET(request: Request) {
       expiresAt: Date.now() + upstream.ttlMs,
     };
     responseCache.set(source, entry);
-    return marketResponse(entry, source, "MISS");
+    return marketResponse(entry, source, serviceBase ? "COLLECTOR" : "MISS");
   } catch (error) {
     if (cached) return marketResponse(cached, source, "STALE");
     return Response.json(
-      { error: source + " unavailable", detail: error instanceof Error ? error.message : "fetch failed" },
+      { error: source + " unavailable", detail: error instanceof Error ? error.message : "fetch failed", backend: serviceBase ? "collector" : "edge-direct" },
       { status: 502 },
     );
   } finally {

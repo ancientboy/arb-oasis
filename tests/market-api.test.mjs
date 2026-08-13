@@ -39,3 +39,35 @@ test("market proxy returns an allowlisted upstream payload", async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test("market proxy prefers the configured collector service", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.__ARB_OASIS_MARKET_SERVICE_URL = "https://market.example.test/";
+  globalThis.__ARB_OASIS_MARKET_SERVICE_TOKEN = "secret";
+  globalThis.fetch = async (input, init) => {
+    assert.equal(String(input), "https://market.example.test/v1/source/bitget-tickers");
+    assert.equal(init.headers.authorization, "Bearer secret");
+    return new Response('{"data":[]}', { headers: { "content-type": "application/json" } });
+  };
+  try {
+    const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+    workerUrl.searchParams.set("market-collector-test", String(process.pid) + "-" + Date.now());
+    const { default: worker } = await import(workerUrl.href);
+    const response = await worker.fetch(
+      new Request("http://localhost/api/market?source=bitget-tickers"),
+      {
+        ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
+        DB: undefined,
+        MARKET_SERVICE_URL: "https://market.example.test/",
+        MARKET_SERVICE_TOKEN: "secret",
+      },
+      { waitUntil() {}, passThroughOnException() {} },
+    );
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("x-arboasis-cache"), "COLLECTOR");
+  } finally {
+    globalThis.fetch = originalFetch;
+    delete globalThis.__ARB_OASIS_MARKET_SERVICE_URL;
+    delete globalThis.__ARB_OASIS_MARKET_SERVICE_TOKEN;
+  }
+});
