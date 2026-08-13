@@ -1,28 +1,40 @@
 import { PAIRS, LABELS } from './config.js';
 
-export function buildOpportunities(common, meta, market, settings){
+export function buildOpportunities(universe, meta, market, settings){
   const rows = [];
   const now = Date.now();
-  for(const symbol of common){
+  for(const item of universe){
+    const symbol=typeof item==='string'?item:item.symbol;
+    const assetClass=typeof item==='string'?'crypto':item.assetClass;
+    const venueCount=typeof item==='string'?3:item.venueCount;
     for(const [a,b] of PAIRS){
-      addDirection(rows, symbol, a, b, meta, market, settings, now);
-      addDirection(rows, symbol, b, a, meta, market, settings, now);
+      if(!meta[a].has(symbol) || !meta[b].has(symbol)) continue;
+      addDirection(rows, symbol, assetClass, venueCount, a, b, meta, market, settings, now);
+      addDirection(rows, symbol, assetClass, venueCount, b, a, meta, market, settings, now);
     }
   }
   return rows.sort((x,y) => y.netEdgeBps - x.netEdgeBps);
 }
 
-function addDirection(rows, symbol, longVenue, shortVenue, meta, market, settings, now){
+function addDirection(rows, symbol, assetClass, venueCount, longVenue, shortVenue, meta, market, settings, now){
   const l = market[longVenue]?.get(symbol); const s = market[shortVenue]?.get(symbol);
   if(!l || !s || l.ask <= 0 || s.bid <= 0) return;
+
   const mid = (l.ask + s.bid) / 2;
   const spreadBps = ((s.bid - l.ask) / mid) * 10000;
-  const fundingBps = (s.funding - l.funding) * 10000;
+  const lInterval = meta[longVenue].get(symbol)?.fundingIntervalHours || 8;
+  const sInterval = meta[shortVenue].get(symbol)?.fundingIntervalHours || 8;
+  const lHourly = l.funding / lInterval;
+  const sHourly = s.funding / sInterval;
+  const fundingHourlyBps = (sHourly - lHourly) * 10000;
+  const fundingHorizonBps = fundingHourlyBps * settings.fundingHorizonHours;
+  const fundingAprPct = fundingHourlyBps * 24 * 365 / 100;
+
   const lFee = feeBps(meta[longVenue].get(symbol), settings.feesBps[longVenue]);
   const sFee = feeBps(meta[shortVenue].get(symbol), settings.feesBps[shortVenue]);
   const roundTripFeesBps = 2 * (lFee + sFee);
   const totalCostBps = roundTripFeesBps + settings.riskBufferBps;
-  const netEdgeBps = spreadBps + fundingBps - totalCostBps;
+  const netEdgeBps = spreadBps + fundingHorizonBps - totalCostBps;
   const capacity = Math.min(l.ask * l.askQty, s.bid * s.bidQty);
   const markDev = Math.max(markDeviation(l), markDeviation(s));
   const age = Math.max(now - l.ts, now - s.ts);
@@ -30,14 +42,19 @@ function addDirection(rows, symbol, longVenue, shortVenue, meta, market, setting
   if(age > settings.staleMs) reasons.push('数据过期');
   if(capacity < settings.minCapacityUsdt) reasons.push('BBO容量低');
   if(markDev > settings.maxMarkDevBps) reasons.push('Mark偏离');
+  if(!Number.isFinite(netEdgeBps)) reasons.push('数据异常');
   const eligible = reasons.length === 0;
+
   rows.push({
-    id:`${symbol}:${longVenue}:${shortVenue}`, symbol, longVenue, shortVenue,
+    id:`${symbol}:${longVenue}:${shortVenue}`, symbol, assetClass, venueCount, longVenue, shortVenue,
     longLabel:LABELS[longVenue], shortLabel:LABELS[shortVenue],
     longAsk:l.ask, shortBid:s.bid, longFunding:l.funding, shortFunding:s.funding,
-    spreadBps, fundingBps, roundTripFeesBps, riskBufferBps:settings.riskBufferBps,
+    spreadBps, fundingHourlyBps, fundingHorizonBps, fundingBps:fundingHorizonBps, fundingAprPct,
+    longFundingInterval:lInterval, shortFundingInterval:sInterval,
+    roundTripFeesBps, riskBufferBps:settings.riskBufferBps,
     totalCostBps, netEdgeBps, capacity, markDevBps:markDev, ageMs:age, eligible, reasons,
-    score:score({netEdgeBps,capacity,markDev,age,eligible},settings)
+    longSource:l.source, shortSource:s.source,
+    score:score({netEdgeBps,capacity,markDev,age,eligible,assetClass},settings)
   });
 }
 
@@ -47,6 +64,7 @@ function score(x,s){
   let v=50 + Math.max(-30,Math.min(35,x.netEdgeBps*2));
   v += Math.min(10,Math.log10(Math.max(1,x.capacity))*2);
   v -= Math.min(20,x.markDev/2); if(x.age>s.staleMs) v-=25; if(!x.eligible) v-=15;
+  if(x.assetClass==='tradfi') v+=2;
   return Math.max(0,Math.min(100,Math.round(v)));
 }
 
@@ -58,5 +76,7 @@ export function exitPnl(position, market, feesBps){
   const shortPct = (position.shortBid - s.ask) / position.shortBid;
   const gross = position.notional * (longPct + shortPct);
   const exitFees = position.notional * 2 * ((feesBps[position.longVenue]+feesBps[position.shortVenue]) / 10000);
-  return { gross, exitFees, net:gross - position.entryFees - exitFees, longExit:l.bid, shortExit:s.ask };
+  const elapsedHours=Math.max(0,(Date.now()-position.openedAt)/3600000);
+  const carryEstimate = position.notional * ((position.entryFundingHourlyBps || 0) * elapsedHours / 10000);
+  return { gross, carryEstimate, exitFees, net:gross + carryEstimate - position.entryFees - exitFees, longExit:l.bid, shortExit:s.ask };
 }
