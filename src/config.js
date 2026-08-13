@@ -22,6 +22,7 @@ export const DEFAULTS = {
 export const ENDPOINTS = {
   binance: {
     contracts: 'https://fapi.binance.com/fapi/v1/exchangeInfo',
+    fundingInfo: 'https://fapi.binance.com/fapi/v1/fundingInfo',
     bbo: 'https://fapi.binance.com/fapi/v1/ticker/bookTicker',
     premium: 'https://fapi.binance.com/fapi/v1/premiumIndex'
   },
@@ -47,5 +48,6 @@ export const TRADFI_HINTS = new Set([
   'AAPL','NVDA','TSLA','MSFT','META','AMZN','GOOGL','GOOG','MSTR','COIN','BABA','PLTR','QQQ','SPY','DIA','IWM',
   'NFLX','AMD','INTC','AVGO','ORCL','CRM','UBER','HOOD','PYPL','SHOP','SNOW','SMCI','DELL','HPE','MUFG','TM','CPNG',
   'MCD','LLY','CSCO','PEP','ACN','MA','UNH','SOFI','HD','CEG','CCJ','FSLR','WDC','ALB','GLW','APH','CMI','EWJ','EWY',
-  'NVDL','TSLL','AAPU','MSFU','METU','AMZU','GGLL','TZA','KORU','SHAZ','PENG'
+  'NVDL','TSLL','AAPU','MSFU','METU','AMZU','GGLL','TZA','KORU','SHAZ','PENG',
+  'TSM','MU','QCOM','DIS','WMT','JPM','BRKB','COST','DKNG','RIVN','GME','ASML','TQQQ','SQQQ','SOXL','SOXS','XLE','EWZ'
 ]);
