@@ -250,6 +250,10 @@ Study whether TradFi perpetual dislocations behave differently during:
 
 Priority: high before any serious capital-efficiency claims.
 
+Status: in progress. On-demand 100-level depth adapters, sequence-presence validation,
+dual-leg VWAP and $10k/$50k/$100k/$250k/$500k/$1m capacity curves are implemented.
+Historical capacity decay and continuous depth snapshot persistence remain incomplete.
+
 BBO size is not enough for realistic position sizing.
 
 ## Deliverables

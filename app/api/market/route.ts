@@ -13,7 +13,9 @@ type CacheEntry = { expiresAt: number; body: string; contentType: string; fetche
 const responseCache = new Map<string, CacheEntry>();
 
 export async function GET(request: Request) {
-  const source = new URL(request.url).searchParams.get("source") ?? "";
+  const requestUrl = new URL(request.url);
+  const source = requestUrl.searchParams.get("source") ?? "";
+  if(source.endsWith("-depth"))return depthResponse(source,requestUrl.searchParams.get("symbol")??"");
   const upstream = UPSTREAMS[source];
   if (!upstream) return Response.json({ error: "unsupported market source" }, { status: 400 });
   const cached = responseCache.get(source);
@@ -52,6 +54,22 @@ export async function GET(request: Request) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function depthResponse(source: string, symbol: string) {
+  if(!/^[A-Z0-9]{2,24}USDT$/.test(symbol))return Response.json({error:"valid USDT symbol is required"},{status:400});
+  const gateSymbol=`${symbol.slice(0,-4)}_USDT`;
+  const urls:Record<string,string[]>={
+    "binance-depth":binanceUrls(`/fapi/v1/depth?symbol=${symbol}&limit=100`),
+    "bitget-depth":[`https://api.bitget.com/api/v2/mix/market/merge-depth?productType=USDT-FUTURES&symbol=${symbol}&limit=100&precision=scale0`],
+    "gate-depth":[`https://api.gateio.ws/api/v4/futures/usdt/order_book?contract=${gateSymbol}&limit=100&with_id=true`],
+  };
+  const targets=urls[source];if(!targets)return Response.json({error:"unsupported depth source"},{status:400});
+  const cacheKey=`${source}:${symbol}`,cached=responseCache.get(cacheKey);if(cached&&cached.expiresAt>Date.now())return marketResponse(cached,cacheKey,"HIT");
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
+  try{const {body,contentType}=await fetchFirstJson(targets,{accept:"application/json","user-agent":"ArbOasis/1.0 depth-research"},controller.signal);const entry={body,contentType,fetchedAt:Date.now(),expiresAt:Date.now()+1500};responseCache.set(cacheKey,entry);return marketResponse(entry,cacheKey,"MISS");}
+  catch(error){if(cached)return marketResponse(cached,cacheKey,"STALE");return Response.json({error:`${source} unavailable`,detail:error instanceof Error?error.message:"fetch failed"},{status:502});}
+  finally{clearTimeout(timer);}
 }
 
 function binanceUrls(path: string) {

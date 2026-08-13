@@ -1,6 +1,7 @@
 import { DEFAULTS, LABELS, VENUES } from './config.js';
 import { fallbackContractUniverse, loadContractUniverse, pollMarket } from './exchanges.js';
 import { buildOpportunities, exitPnl } from './engine.js';
+import { capacityCurve, loadDepth } from './depth.js';
 import { RealtimeFeeds } from './streams.js';
 import { ResearchHistory, FundingStats, saveClosedTrade, paperSummary, clearClosedTrades } from './history.js';
 
@@ -9,7 +10,7 @@ const els={
   universeCount:$('#universeCount'),tripleCount:$('#tripleCount'),tradfiCount:$('#tradfiCount'),bestEdge:$('#bestEdge'),bestEdgeSymbol:$('#bestEdgeSymbol'),eligibleCount:$('#eligibleCount'),venueHealth:$('#venueHealth'),connectionPill:$('#connectionPill'),universeNote:$('#universeNote'),
   body:$('#opportunityBody'),lastUpdate:$('#lastUpdate'),visibleCount:$('#visibleCount'),search:$('#searchInput'),minEdge:$('#minEdgeInput'),minCapacity:$('#minCapacityInput'),riskBuffer:$('#riskBufferInput'),maxMarkDev:$('#maxMarkDevInput'),fundingHorizon:$('#fundingHorizonInput'),
   bnFee:$('#binanceFeeInput'),bgFee:$('#bitgetFeeInput'),gtFee:$('#gateFeeInput'),scope:$('#scopeSegment'),refresh:$('#refreshMarketsBtn'),paperNotional:$('#paperNotional'),paperPositions:$('#paperPositions'),clearPaper:$('#clearPaperBtn'),events:$('#systemEvents'),
-  fundingLeaders:$('#fundingLeaders'),persistentRoutes:$('#persistentRoutes'),paperSummary:$('#paperSummary'),clearResearch:$('#clearResearchBtn'),historyWindow:$('#historyWindow'),reversalRisk:$('#reversalRisk'),tradfiCarry:$('#tradfiCarry'),settlementCalendar:$('#settlementCalendar'),researchCoverage:$('#researchCoverage'),sessionCarry:$('#sessionCarry'),venueReliability:$('#venueReliability')
+  fundingLeaders:$('#fundingLeaders'),persistentRoutes:$('#persistentRoutes'),paperSummary:$('#paperSummary'),clearResearch:$('#clearResearchBtn'),historyWindow:$('#historyWindow'),reversalRisk:$('#reversalRisk'),tradfiCarry:$('#tradfiCarry'),settlementCalendar:$('#settlementCalendar'),researchCoverage:$('#researchCoverage'),sessionCarry:$('#sessionCarry'),venueReliability:$('#venueReliability'),depthCurve:$('#depthCurve')
 };
 
 const history=new ResearchHistory({maxSamples:DEFAULTS.historyMaxSamples,topN:DEFAULTS.historyTopN});
@@ -37,7 +38,7 @@ function bind(){
   els.scope?.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;state.scope=b.dataset.scope;[...els.scope.children].forEach(x=>x.classList.toggle('active',x===b));renderTable();});
   els.historyWindow?.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;state.serverWindow=b.dataset.window;[...els.historyWindow.children].forEach(x=>x.classList.toggle('active',x===b));serverFunding.clear();renderResearch();loadServerHistory();});
   els.refresh?.addEventListener('click',refreshUniverse);
-  els.body?.addEventListener('click',e=>{const b=e.target.closest('[data-paper]');if(b)openPaper(b.dataset.paper);});
+  els.body?.addEventListener('click',e=>{const paper=e.target.closest('[data-paper]');if(paper)openPaper(paper.dataset.paper);const depth=e.target.closest('[data-depth]');if(depth)inspectDepth(depth.dataset.depth);});
   els.paperPositions?.addEventListener('click',e=>{const b=e.target.closest('[data-close]');if(b)closePaper(b.dataset.close);});
   els.clearPaper?.addEventListener('click',()=>{state.paper=[];savePaper();renderPaper();});
   els.clearResearch?.addEventListener('click',()=>{history.clear();fundingStats.clear();clearClosedTrades();renderResearch();pushEvent('本地研究统计已清空','warn');});
@@ -135,8 +136,9 @@ function renderTable(){
     <td class="cap ${fs?.annualizedPct>0?'positive':'negative'}">${fs?pct(fs.annualizedPct):'采集中'}</td>
     <td class="cap">${fs?`${f(fs.positiveRate*100,0)}% · n${fs.count}`:'—'}</td>
     <td class="cap ${x.netEdgeBps>0?'positive':'negative'}">${bp(x.netEdgeBps)}</td><td class="cap">${money(x.capacity)}</td><td>${riskHtml(x)}</td>
-    <td><button class="paper-btn" data-paper="${x.id}" ${x.eligible?'':'disabled'}>Paper</button></td></tr>`}).join('');
+    <td><div class="row-actions"><button class="small-btn" data-depth="${x.id}">Depth</button><button class="paper-btn" data-paper="${x.id}" ${x.eligible?'':'disabled'}>Paper</button></div></td></tr>`}).join('');
 }
+async function inspectDepth(id){const opportunity=state.opportunities.find(x=>x.id===id);if(!opportunity)return;els.depthCurve.innerHTML='<div class="empty-state">正在读取 '+opportunity.symbol+' 多档订单簿…</div>';try{const depth=await loadDepth(opportunity.symbol,state.meta);const curve=capacityCurve(opportunity,depth);if(!curve.length){const details=[opportunity.longVenue,opportunity.shortVenue].map(venue=>depth.errors[venue]||depth.books[venue]?.integrityError).filter(Boolean).join(' / ');throw new Error(details?`双腿深度不可用（${details}）`:'双腿深度不可用');}els.depthCurve.innerHTML=curve.map(x=>`<div class="research-row"><div><b>${money(x.notional)}</b><span>${opportunity.symbol} · ${opportunity.longLabel} 买 / ${opportunity.shortLabel} 卖</span></div><div><strong class="${x.executable&&x.netEdgeBps>0?'positive':x.executable?'':'negative'}">${x.executable?bp(x.netEdgeBps)+' bp':'容量不足'}</strong><small>VWAP ${price(x.buyVwap)} → ${price(x.sellVwap)} · Spread ${bp(x.spreadBps)} bp · 填充 ${f(x.fillRate*100,0)}%</small></div></div>`).join('');pushEvent(`已计算 ${opportunity.symbol} 深度容量曲线`,'ok');}catch(error){els.depthCurve.innerHTML=`<div class="empty-state">深度读取失败：${escapeHtml(error.message)}</div>`;pushEvent(`深度读取失败：${error.message}`,'warn');}}
 function riskHtml(x){if(x.eligible)return`<span class="risk-pill risk-ok">OK · ${x.score}</span>`;const bad=x.reasons.includes('数据过期')||x.reasons.includes('Mark偏离');return`<span class="risk-pill ${bad?'risk-bad':'risk-warn'}" title="${x.reasons.join(' / ')}">${x.reasons[0]} · ${x.score}</span>`;}
 
 function renderHealth(){

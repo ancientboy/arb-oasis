@@ -6,7 +6,7 @@
   <meta name="description" content="ArbOasis - Binance, Bitget and Gate cross-venue spread, funding carry and TradFi/RWA perpetual arbitrage research scanner" />
   <title>ArbOasis · Cross-Venue Alpha Research</title>
   <link rel="stylesheet" href="./styles.css" />
-</head>
+<style>.row-actions{display:flex;gap:5px;flex-wrap:wrap}</style></head>
 <body>
 <div class="app-shell">
 <header class="topbar"><div class="brand-wrap"><div class="brand-mark">AO</div><div><div class="brand">ArbOasis</div><div class="subtitle">Cross-Venue Spread · Funding Carry · TradFi/RWA</div></div></div><div class="top-actions"><div id="connectionPill" class="status-pill status-warn"><span class="status-dot"></span><span>Connecting</span></div><button id="refreshMarketsBtn" class="ghost-btn">刷新合约池</button></div></header>
@@ -25,6 +25,8 @@
 
 <section class="panel table-panel"><div class="table-toolbar"><div class="toolbar-left"><span id="lastUpdate">尚未更新</span><span class="divider"></span><span id="visibleCount">0 个方向</span></div><div class="toolbar-right"><label class="inline-label">Paper Notional <input id="paperNotional" type="number" value="10000" step="1000" min="100" /></label></div></div>
 <div class="table-wrap"><table><thead><tr><th>类别</th><th>标的</th><th>方向</th><th>Long Ask</th><th>Short Bid</th><th>Spread bp</th><th>Funding Δ /h</th><th>当前 Carry APR</th><th>历史 Carry APR</th><th>Funding 持续性</th><th>Net Edge</th><th>BBO 容量</th><th>风险</th><th></th></tr></thead><tbody id="opportunityBody"><tr><td colspan="14" class="empty-cell">正在初始化市场数据…</td></tr></tbody></table></div></section>
+
+<section class="panel"><div class="panel-title-row compact"><div><h2>Depth & Capacity Curve</h2><p>点击任一方向的 Depth，使用真实多档订单簿计算 $10k–$1m 双腿 VWAP、填充率和费用后净 Edge。</p></div></div><div id="depthCurve" class="research-list"><div class="empty-state">选择一个行情方向查看深度容量</div></div></section>
 
 <section class="research-grid">
   <section class="panel"><div class="panel-title-row compact"><div><h2>Funding Carry Desk</h2><p>优先使用跨设备持久化 Funding 历史；显示均值、P10/P90、正向持续率、反转次数与样本数。</p></div><div class="segmented" id="historyWindow"><button data-window="24h">24H</button><button data-window="7d" class="active">7D</button><button data-window="30d">30D</button><button data-window="90d">90D</button></div></div><div id="fundingLeaders" class="research-list"><div class="empty-state">Funding 历史正在积累</div></div></section>
