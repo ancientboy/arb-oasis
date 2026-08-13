@@ -9,12 +9,13 @@ const els={
   universeCount:$('#universeCount'),tripleCount:$('#tripleCount'),tradfiCount:$('#tradfiCount'),bestEdge:$('#bestEdge'),bestEdgeSymbol:$('#bestEdgeSymbol'),eligibleCount:$('#eligibleCount'),venueHealth:$('#venueHealth'),connectionPill:$('#connectionPill'),universeNote:$('#universeNote'),
   body:$('#opportunityBody'),lastUpdate:$('#lastUpdate'),visibleCount:$('#visibleCount'),search:$('#searchInput'),minEdge:$('#minEdgeInput'),minCapacity:$('#minCapacityInput'),riskBuffer:$('#riskBufferInput'),maxMarkDev:$('#maxMarkDevInput'),fundingHorizon:$('#fundingHorizonInput'),
   bnFee:$('#binanceFeeInput'),bgFee:$('#bitgetFeeInput'),gtFee:$('#gateFeeInput'),scope:$('#scopeSegment'),refresh:$('#refreshMarketsBtn'),paperNotional:$('#paperNotional'),paperPositions:$('#paperPositions'),clearPaper:$('#clearPaperBtn'),events:$('#systemEvents'),
-  fundingLeaders:$('#fundingLeaders'),persistentRoutes:$('#persistentRoutes'),paperSummary:$('#paperSummary'),clearResearch:$('#clearResearchBtn'),historyWindow:$('#historyWindow')
+  fundingLeaders:$('#fundingLeaders'),persistentRoutes:$('#persistentRoutes'),paperSummary:$('#paperSummary'),clearResearch:$('#clearResearchBtn'),historyWindow:$('#historyWindow'),reversalRisk:$('#reversalRisk'),tradfiCarry:$('#tradfiCarry'),settlementCalendar:$('#settlementCalendar'),researchCoverage:$('#researchCoverage')
 };
 
 const history=new ResearchHistory({maxSamples:DEFAULTS.historyMaxSamples,topN:DEFAULTS.historyTopN});
 const fundingStats=new FundingStats();
 const serverFunding=new Map();
+const serverOpportunities=new Map();
 const state={
   universe:[],tripleCommon:[],meta:null,market:null,opportunities:[],scope:'all',busy:false,streams:null,lastRender:0,renderTimer:null,
   venueStatus:Object.fromEntries(VENUES.map(v=>[v,{ok:false,last:0,error:'',mode:'REST'}])),
@@ -48,6 +49,7 @@ async function refreshUniverse(){
     els.universeCount.textContent=u.universe.length.toLocaleString();els.tripleCount.textContent=u.tripleCommon.length.toLocaleString();els.tradfiCount.textContent=u.tradfiCount.toLocaleString();
     els.universeNote.textContent=`两所以上共同池 ${u.universe.length} · 三所共同 ${u.tripleCommon.length} · TradFi/RWA ${u.tradfiCount}`;
     pushEvent(`合约池刷新：${u.universe.length} 个标的至少在两所共同交易，其中 ${u.tradfiCount} 个识别为 TradFi/RWA`,'ok');
+    for(const [venue,error] of Object.entries(u.errors||{}))if(error)pushEvent(`${LABELS[venue]} 合约源降级：${error}`,'warn');
     if(state.market)startStreams();
   }catch(err){pushEvent(`合约池读取失败：${err.message}`,'bad');els.universeNote.textContent='合约池读取失败，可稍后刷新';}
 }
@@ -56,7 +58,7 @@ async function restRefresh(){
   if(state.busy||!state.meta)return;state.busy=true;
   try{
     const m=await pollMarket(state.meta);state.market=m;
-    for(const v of VENUES)state.venueStatus[v]={ok:m[v].size>0,last:Date.now(),error:'',mode:'REST'};
+    for(const v of VENUES)state.venueStatus[v]={ok:m[v].size>0,last:Date.now(),error:m.errors?.[v]||'',mode:'REST'};
     rebuild();if(!state.streams)startStreams();els.lastUpdate.textContent=`REST 基线 ${new Date().toLocaleTimeString()} · ${m.latencyMs}ms`;
   }catch(err){pushEvent(`REST 行情刷新失败：${err.message}`,'bad');renderHealth();}
   finally{state.busy=false;}
@@ -65,7 +67,7 @@ async function restRefresh(){
 function startStreams(){
   if(!state.market||!state.meta||!state.universe.length)return;
   state.streams?.stop();
-  state.streams=new RealtimeFeeds({universe:state.universe,meta:state.meta,market:state.market,onUpdate:(venue)=>{state.venueStatus[venue]={ok:true,last:Date.now(),error:'',mode:'WS'};scheduleRebuild();},onStatus:(venue,status)=>{state.venueStatus[venue].ok=status==='live';state.venueStatus[venue].last=Date.now();state.venueStatus[venue].mode='WS';state.venueStatus[venue].error=status==='error'?'WebSocket error':'';renderHealth();}}).start();
+  state.streams=new RealtimeFeeds({universe:state.universe,meta:state.meta,market:state.market,onUpdate:(venue)=>{state.venueStatus[venue]={ok:true,last:Date.now(),error:'',mode:'WS'};scheduleRebuild();},onStatus:(venue,status,detail)=>{state.venueStatus[venue].ok=status==='live';state.venueStatus[venue].last=Date.now();state.venueStatus[venue].mode='WS';state.venueStatus[venue].error=detail||(status==='error'?'WebSocket error':'');renderHealth();}}).start();
 }
 function scheduleRebuild(){const now=Date.now();const wait=Math.max(0,DEFAULTS.renderThrottleMs-(now-state.lastRender));if(state.renderTimer)return;state.renderTimer=setTimeout(()=>{state.renderTimer=null;rebuild();},wait);}
 
@@ -81,15 +83,15 @@ function rebuild(){
 }
 
 async function syncServerHistory(opportunities){
-  const now=Date.now();if(now-state.lastServerWrite<60000)return;state.lastServerWrite=now;
-  const observations=opportunities.slice(0,120).map(x=>({id:x.id,symbol:x.symbol,assetClass:x.assetClass,longVenue:x.longVenue,shortVenue:x.shortVenue,fundingHourlyBps:x.fundingHourlyBps,spreadBps:x.spreadBps,netEdgeBps:x.netEdgeBps,capacity:x.capacity,score:x.score,eligible:x.eligible,observedAt:now}));
+  const now=Date.now();if(now-state.lastServerWrite<120000)return;state.lastServerWrite=now;
+  const observations=opportunities.slice(0,80).map(x=>({id:x.id,symbol:x.symbol,assetClass:x.assetClass,longVenue:x.longVenue,shortVenue:x.shortVenue,fundingHourlyBps:x.fundingHourlyBps,spreadBps:x.spreadBps,netEdgeBps:x.netEdgeBps,capacity:x.capacity,score:x.score,eligible:x.eligible,observedAt:now}));
   try{const res=await fetch('/api/history',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({observations})});if(!res.ok)throw new Error(`HTTP ${res.status}`);await loadServerHistory();}
   catch(err){state.lastServerWrite=now-45000;pushEvent(`服务端历史暂不可用，继续使用本机统计：${err.message}`,'warn');}
 }
 
 async function loadServerHistory(){
-  try{const res=await fetch(`/api/history?window=${state.serverWindow}`,{cache:'no-store'});if(!res.ok)throw new Error(`HTTP ${res.status}`);const data=await res.json();serverFunding.clear();for(const stat of data.routes||[])serverFunding.set(stat.id,stat);if(data.routes?.length)renderResearch();}
-  catch{serverFunding.clear();}
+  try{const [fundingRes,opportunityRes]=await Promise.all([fetch(`/api/history?metric=funding&window=${state.serverWindow}`,{cache:'no-store'}),fetch(`/api/history?metric=opportunity&window=${state.serverWindow}`,{cache:'no-store'})]);if(!fundingRes.ok||!opportunityRes.ok)throw new Error('history unavailable');const [fundingData,opportunityData]=await Promise.all([fundingRes.json(),opportunityRes.json()]);serverFunding.clear();serverOpportunities.clear();for(const stat of fundingData.routes||[])serverFunding.set(stat.id,stat);for(const stat of opportunityData.routes||[])serverOpportunities.set(stat.id,stat);renderResearch();}
+  catch{serverFunding.clear();serverOpportunities.clear();}
 }
 
 function filtered(){
@@ -141,8 +143,12 @@ function renderPaper(){
 
 function renderResearch(){
   const remote=[...serverFunding.values()].filter(x=>x.count>=2).slice(0,10).map(x=>({symbol:x.symbol,longVenue:x.longVenue,shortVenue:x.shortVenue,stat:x}));
-  const leaders=remote.length?remote:fundingStats.leaders(state.opportunities,10);els.fundingLeaders.innerHTML=leaders.length?leaders.map(x=>`<div class="research-row"><div><b>${x.symbol}</b><span>${LABELS[x.longVenue]} L / ${LABELS[x.shortVenue]} S</span></div><div><strong class="${x.stat.annualizedPct>=0?'positive':'negative'}">${pct(x.stat.annualizedPct)}</strong><small>${remote.length?state.serverWindow+' 服务端':'本机'}均值 · P10/P90 ${bp(x.stat.p10HourlyBps)} / ${bp(x.stat.p90HourlyBps)} bp/h · 正向 ${f(x.stat.positiveRate*100,0)}% · 反转 ${x.stat.reversals||0} · n${x.stat.count}</small></div></div>`).join(''):'<div class="empty-state">Funding 历史正在积累，至少需要 2 个统计样本</div>';
-  const persistent=history.stats(state.opportunities).slice(0,10);els.persistentRoutes.innerHTML=persistent.length?persistent.map(x=>`<div class="research-row"><div><b>${x.symbol}</b><span>${LABELS[x.longVenue]} L / ${LABELS[x.shortVenue]} S</span></div><div><strong>${f(x.persistence*100,0)}%</strong><small>出现率 · 平均 Edge ${bp(x.avg)} bp · 最大 ${bp(x.max)} bp</small></div></div>`).join(''):'<div class="empty-state">Edge 持续性数据正在积累</div>';
+  const localLeaders=fundingStats.leaders(state.opportunities,10);const currentLeaders=state.opportunities.filter(x=>Number.isFinite(x.fundingHourlyBps)).sort((a,b)=>b.fundingHourlyBps-a.fundingHourlyBps).slice(0,10).map(x=>({symbol:x.symbol,longVenue:x.longVenue,shortVenue:x.shortVenue,stat:{annualizedPct:x.fundingAprPct,p10HourlyBps:x.fundingHourlyBps,p90HourlyBps:x.fundingHourlyBps,positiveRate:x.fundingHourlyBps>0?1:0,reversals:0,count:1,avgHourlyBps:x.fundingHourlyBps}}));const leaders=remote.length?remote:localLeaders.length?localLeaders:currentLeaders;els.fundingLeaders.innerHTML=leaders.length?leaders.map(x=>{const cost=2*(settings().feesBps[x.longVenue]+settings().feesBps[x.shortVenue])+settings().riskBufferBps;const breakEven=x.stat.avgHourlyBps>0?cost/x.stat.avgHourlyBps:null;return`<div class="research-row"><div><b>${x.symbol}</b><span>${LABELS[x.longVenue]} L / ${LABELS[x.shortVenue]} S</span></div><div><strong class="${x.stat.annualizedPct>=0?'positive':'negative'}">${pct(x.stat.annualizedPct)}</strong><small>${remote.length?state.serverWindow+' 服务端':localLeaders.length?'本机':'当前快照'} · P10/P90 ${bp(x.stat.p10HourlyBps)} / ${bp(x.stat.p90HourlyBps)} bp/h · 正向 ${f(x.stat.positiveRate*100,0)}% · 反转 ${x.stat.reversals||0} · 回本 ${breakEven?f(breakEven,1)+'h':'—'} · n${x.stat.count}</small></div></div>`}).join(''):'<div class="empty-state">暂无可靠 Funding 数据</div>';
+  const remotePersistent=[...serverOpportunities.values()].slice(0,10);const localPersistent=history.stats(state.opportunities).slice(0,10);els.persistentRoutes.innerHTML=remotePersistent.length?remotePersistent.map(x=>`<div class="research-row"><div><b>${x.symbol}</b><span>${LABELS[x.longVenue]} L / ${LABELS[x.shortVenue]} S</span></div><div><strong>${f(x.eligibleRate*100,0)}%</strong><small>可交易率 · 平均/最大 Edge ${bp(x.avgNetEdgeBps)} / ${bp(x.maxNetEdgeBps)} bp · 平均容量 ${money(x.avgCapacityUsdt)} · n${x.count}</small></div></div>`).join(''):localPersistent.length?localPersistent.map(x=>`<div class="research-row"><div><b>${x.symbol}</b><span>${LABELS[x.longVenue]} L / ${LABELS[x.shortVenue]} S</span></div><div><strong>${f(x.persistence*100,0)}%</strong><small>本机出现率 · 平均 Edge ${bp(x.avg)} bp · 最大 ${bp(x.max)} bp</small></div></div>`).join(''):'<div class="empty-state">Edge 持续性数据正在积累</div>';
+  const risk=[...serverFunding.values()].filter(x=>x.count>=2).sort((a,b)=>(b.reversals/b.count)-(a.reversals/a.count)).slice(0,10);els.reversalRisk.innerHTML=risk.length?risk.map(x=>`<div class="research-row"><div><b>${x.symbol}</b><span>${LABELS[x.longVenue]} L / ${LABELS[x.shortVenue]} S</span></div><div><strong class="${x.reversals?'negative':'positive'}">${x.reversals}</strong><small>反转 · n${x.count} · 正向 ${f(x.positiveRate*100,0)}%</small></div></div>`).join(''):'<div class="empty-state">至少积累 2 个服务端样本后显示</div>';
+  const tradfi=(remote.length?remote:leaders).filter(x=>x.stat&&((serverFunding.get(x.stat.id)?.assetClass)||state.opportunities.find(o=>o.symbol===x.symbol)?.assetClass)==='tradfi').slice(0,10);els.tradfiCarry.innerHTML=tradfi.length?tradfi.map(x=>`<div class="research-row"><div><b>${x.symbol}</b><span>${LABELS[x.longVenue]} L / ${LABELS[x.shortVenue]} S</span></div><div><strong class="${x.stat.annualizedPct>=0?'positive':'negative'}">${pct(x.stat.annualizedPct)}</strong><small>Carry APR · n${x.stat.count}</small></div></div>`).join(''):'<div class="empty-state">当前共同交易池暂无可靠 TradFi Carry 样本</div>';
+  const settlements=[];const seen=new Set();for(const x of state.opportunities){for(const side of ['long','short']){const venue=x[side+'Venue'],time=x[side+'NextFundingTime'],rate=x[side+'Funding'];const key=x.symbol+':'+venue;if(time>Date.now()&&!seen.has(key)){seen.add(key);settlements.push({symbol:x.symbol,venue,time,rate});}}}settlements.sort((a,b)=>a.time-b.time);els.settlementCalendar.innerHTML=settlements.length?settlements.slice(0,10).map(x=>`<div class="research-row"><div><b>${x.symbol}</b><span>${LABELS[x.venue]}</span></div><div><strong>${new Date(x.time).toLocaleTimeString()}</strong><small>${new Date(x.time).toLocaleDateString()} · Funding ${pct(x.rate*100,4)}</small></div></div>`).join(''):'<div class="empty-state">当前行情未返回下一结算时间</div>';
+  const fundingSamples=[...serverFunding.values()].reduce((sum,x)=>sum+x.count,0);const opportunitySamples=[...serverOpportunities.values()].reduce((sum,x)=>sum+x.count,0);els.researchCoverage.innerHTML=`<div class="research-row"><div><b>${state.serverWindow.toUpperCase()}</b><span>当前服务端窗口</span></div><div><strong>${fundingSamples.toLocaleString()}</strong><small>Funding 样本</small></div></div><div class="research-row"><div><b>${serverOpportunities.size}</b><span>已观察路线</span></div><div><strong>${opportunitySamples.toLocaleString()}</strong><small>机会快照</small></div></div>`;
   const ps=paperSummary();els.paperSummary.innerHTML=`<div><b>${ps.count}</b><span>已平仓</span></div><div><b class="${ps.pnl>=0?'positive':'negative'}">${ps.pnl>=0?'+':''}$${f(ps.pnl,2)}</b><span>累计净 PnL</span></div><div><b>${f(ps.winRate*100,0)}%</b><span>胜率</span></div><div><b>${f(ps.avgHoldMin,1)}m</b><span>平均持仓</span></div>`;
 }
 

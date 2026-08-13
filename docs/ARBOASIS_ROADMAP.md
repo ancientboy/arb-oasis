@@ -17,7 +17,8 @@ Do not rebuild the project from scratch when continuing development. Inspect the
 
 # P0 — Research Scanner Foundation
 
-Status: substantially implemented.
+Status: substantially implemented. REST market access now runs through a same-origin
+Sites backend proxy so browser CORS/region restrictions do not blank the scanner.
 
 ### Completed / present in current codebase
 
@@ -44,15 +45,22 @@ Status: substantially implemented.
 - paper trading
 - static research dashboard
 
+### P0 hardening completed in current Sites build
+
+- same-origin backend market proxy with a fixed upstream allowlist and bounded timeout
+- partial-venue degradation: the scanner continues when any two venues remain usable
+- Bitget public WebSocket v2 subscription and ticker field normalization
+- exponential reconnect/backoff telemetry without duplicate reconnect loops
+- explicit missing bid-size, funding, mark and index semantics
+- data-source health and degraded-source events in the UI
+- API/render smoke coverage in the automated test suite
+- symbol additions/removals refresh without a full page reload
+
 ### P0 remaining hardening
 
 - verify every exchange WebSocket subscription against current production behavior
-- handle symbol additions/removals without page reload
-- improve reconnect/backoff telemetry
-- make missing-data semantics explicit
 - improve contract-symbol equivalence for TradFi aliases
-- add clearer data-source timestamps to UI
-- add automated browser smoke test
+- add full-depth sequence/book integrity validation
 
 ---
 
@@ -63,6 +71,8 @@ Priority: highest.
 Status: in progress. The first Sites/D1 slice now persists funding observations and
 spread/opportunity snapshots, exposes a 7d/30d Carry statistics API, and lets the
 dashboard switch between server-backed 7d/30d Carry statistics with a local fallback.
+The same APIs now support 24h and 90d windows plus server-backed opportunity
+persistence, executable-rate, average/max edge and capacity statistics.
 
 The browser localStorage research history is temporary. The next major milestone is durable historical data.
 
@@ -70,8 +80,8 @@ The browser localStorage research history is temporary. The next major milestone
 
 ### 1. Backend collector service
 
-Initial browser-to-backend snapshot collector implemented; a continuously running
-independent collector remains incomplete.
+Initial browser-to-backend snapshot collector and server-side public-market gateway
+implemented. A continuously running independent collector remains incomplete.
 
 Collect public market data continuously from Binance, Bitget and Gate.
 
@@ -123,9 +133,11 @@ Expose endpoints for:
 
 ### 4. UI integration
 
-The Funding Carry Desk now switches between server-backed 7d/30d statistics and
-falls back to browser-local statistics when the API is unavailable. Settlement
-calendar and richer session breakdowns remain incomplete.
+The Funding Carry Desk now switches between server-backed 24h/7d/30d/90d statistics
+and falls back to current/local statistics when the API is unavailable. It includes
+Carry Leaders, Persistent Edge, Reversal Risk, TradFi Carry, break-even holding
+estimates, Settlement Calendar and research coverage. Richer session breakdowns
+remain incomplete.
 
 Replace local-only statistics with server-backed historical windows.
 
@@ -141,6 +153,11 @@ Target windows:
 # P2 — Funding Carry Research Engine
 
 Priority: highest alongside P1.
+
+Status: in progress. Current/mean/median/P10/P90, positive ratio, reversal count,
+7d/30d comparison windows, fee-adjusted break-even holding estimates, dedicated
+Carry/TradFi/Reversal/Settlement views and sample coverage are implemented.
+Positive/negative streak analytics and carry-by-session remain incomplete.
 
 The goal is to distinguish persistent Carry from temporary headline APY.
 

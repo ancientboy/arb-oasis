@@ -102,9 +102,37 @@ export async function GET(request: Request) {
   try {
     await ensureSchema();
     const db = getDatabase();
-    const requestedWindow = new URL(request.url).searchParams.get("window") ?? "7d";
-    const days = requestedWindow === "30d" ? 30 : 7;
+    const url = new URL(request.url);
+    const requestedWindow = url.searchParams.get("window") ?? "7d";
+    const metric = url.searchParams.get("metric") ?? "funding";
+    const days = requestedWindow === "24h" ? 1 : requestedWindow === "30d" ? 30 : requestedWindow === "90d" ? 90 : 7;
     const since = Date.now() - days * DAY;
+    if (metric === "opportunity") {
+      const { results = [] } = await db.prepare("SELECT route_id, symbol, asset_class, long_venue, short_venue, net_edge_bps, capacity_usdt, eligible, observed_at FROM opportunity_snapshots WHERE observed_at >= ? ORDER BY route_id ASC, observed_at ASC LIMIT 50000")
+        .bind(since).all<Record<string, unknown>>();
+      const grouped = new Map<string, Record<string, unknown>[]>();
+      for (const row of results) {
+        const key = String(row.route_id), rows = grouped.get(key) ?? [];
+        rows.push(row); grouped.set(key, rows);
+      }
+      const routes = [...grouped.entries()].map(([id, rows]) => {
+        const edges = rows.map((row) => finite(row.net_edge_bps));
+        const capacities = rows.map((row) => finite(row.capacity_usdt));
+        const last = rows.at(-1)!;
+        return {
+          id, symbol: last.symbol, assetClass: last.asset_class,
+          longVenue: last.long_venue, shortVenue: last.short_venue,
+          count: rows.length,
+          eligibleRate: rows.filter((row) => finite(row.eligible) === 1).length / rows.length,
+          avgNetEdgeBps: edges.reduce((sum, value) => sum + value, 0) / edges.length,
+          maxNetEdgeBps: Math.max(...edges),
+          avgCapacityUsdt: capacities.reduce((sum, value) => sum + value, 0) / capacities.length,
+          lastNetEdgeBps: edges.at(-1),
+          lastTs: last.observed_at,
+        };
+      }).sort((a, b) => b.eligibleRate - a.eligibleRate || b.avgNetEdgeBps - a.avgNetEdgeBps);
+      return Response.json({ metric, window: requestedWindow, since, routes, generatedAt: Date.now() });
+    }
     const { results = [] } = await db.prepare(`SELECT route_id, symbol, asset_class,
       long_venue, short_venue, hourly_bps, observed_at FROM funding_observations
       WHERE observed_at >= ? ORDER BY route_id ASC, observed_at ASC LIMIT 50000`)
@@ -126,7 +154,7 @@ export async function GET(request: Request) {
         reversals: signReversals(values), annualizedPct: mean * 24 * 365 / 100,
         lastHourlyBps: values.at(-1), lastTs: last.observed_at };
     }).sort((a, b) => b.annualizedPct - a.annualizedPct);
-    return Response.json({ window: `${days}d`, since, routes, generatedAt: Date.now() });
+    return Response.json({ metric, window: requestedWindow, since, routes, generatedAt: Date.now() });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "history query failed" }, { status: 500 });
   }

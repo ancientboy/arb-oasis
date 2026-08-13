@@ -39,7 +39,11 @@ function addDirection(rows, symbol, assetClass, venueCount, longVenue, shortVenu
   const markDev = Math.max(markDeviation(l), markDeviation(s));
   const age = Math.max(now - l.ts, now - s.ts);
   const reasons = [];
+  const missing=new Set([...(l.missingFields||[]),...(s.missingFields||[])]);
   if(age > settings.staleMs) reasons.push('数据过期');
+  if(missing.has('bidQty')||missing.has('askQty')) reasons.push('容量数据缺失');
+  if(missing.has('funding')) reasons.push('Funding缺失');
+  if(missing.has('mark')||missing.has('index')) reasons.push('Mark/Index缺失');
   if(capacity < settings.minCapacityUsdt) reasons.push('BBO容量低');
   if(markDev > settings.maxMarkDevBps) reasons.push('Mark偏离');
   if(!Number.isFinite(netEdgeBps)) reasons.push('数据异常');
@@ -49,6 +53,7 @@ function addDirection(rows, symbol, assetClass, venueCount, longVenue, shortVenu
     id:`${symbol}:${longVenue}:${shortVenue}`, symbol, assetClass, venueCount, longVenue, shortVenue,
     longLabel:LABELS[longVenue], shortLabel:LABELS[shortVenue],
     longAsk:l.ask, shortBid:s.bid, longFunding:l.funding, shortFunding:s.funding,
+    longNextFundingTime:l.nextFundingTime, shortNextFundingTime:s.nextFundingTime,
     spreadBps, fundingHourlyBps, fundingHorizonBps, fundingBps:fundingHorizonBps, fundingAprPct,
     longFundingInterval:lInterval, shortFundingInterval:sInterval,
     roundTripFeesBps, riskBufferBps:settings.riskBufferBps,

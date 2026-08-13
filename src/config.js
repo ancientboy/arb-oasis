@@ -21,25 +21,25 @@ export const DEFAULTS = {
 
 export const ENDPOINTS = {
   binance: {
-    contracts: 'https://fapi.binance.com/fapi/v1/exchangeInfo',
-    fundingInfo: 'https://fapi.binance.com/fapi/v1/fundingInfo',
-    bbo: 'https://fapi.binance.com/fapi/v1/ticker/bookTicker',
-    premium: 'https://fapi.binance.com/fapi/v1/premiumIndex'
+    contracts: '/api/market?source=binance-contracts',
+    fundingInfo: '/api/market?source=binance-funding-info',
+    bbo: '/api/market?source=binance-bbo',
+    premium: '/api/market?source=binance-premium'
   },
   bitget: {
-    contracts: 'https://api.bitget.com/api/v2/mix/market/contracts?productType=USDT-FUTURES',
-    tickers: 'https://api.bitget.com/api/v2/mix/market/tickers?productType=USDT-FUTURES'
+    contracts: '/api/market?source=bitget-contracts',
+    tickers: '/api/market?source=bitget-tickers'
   },
   gate: {
-    contracts: 'https://api.gateio.ws/api/v4/futures/usdt/contracts',
-    tickers: 'https://api.gateio.ws/api/v4/futures/usdt/tickers'
+    contracts: '/api/market?source=gate-contracts',
+    tickers: '/api/market?source=gate-tickers'
   }
 };
 
 export const WS = {
   binanceBook: 'wss://fstream.binance.com/ws/!bookTicker',
   binanceMark: 'wss://fstream.binance.com/ws/!markPrice@arr@1s',
-  bitget: 'wss://ws.bitget.com/v3/ws/public',
+  bitget: 'wss://ws.bitget.com/v2/ws/public',
   gate: 'wss://ws.gate.com/v4/ws/futures/usdt'
 };
 

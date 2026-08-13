@@ -8,18 +8,29 @@ async function getJson(url, timeoutMs = 9000){
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try{
     const res = await fetch(url, { signal: ctrl.signal, cache: 'no-store' });
-    if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    if(!res.ok){const detail=await res.json().catch(()=>null);throw new Error(detail?.error||String(res.status)+' '+res.statusText);}
     return await res.json();
   } finally { clearTimeout(timer); }
 }
 
 export async function loadContractUniverse(){
-  const [bn, bnFundingInfo, bg, gt] = await Promise.all([
-    getJson(ENDPOINTS.binance.contracts),
-    getJson(ENDPOINTS.binance.fundingInfo),
-    getJson(ENDPOINTS.bitget.contracts),
-    getJson(ENDPOINTS.gate.contracts)
+  const settled = await Promise.allSettled([
+    getJson(ENDPOINTS.binance.contracts,15000),
+    getJson(ENDPOINTS.binance.fundingInfo,15000),
+    getJson(ENDPOINTS.bitget.contracts,15000),
+    getJson(ENDPOINTS.gate.contracts,15000)
   ]);
+  const [bnResult,bnFundingResult,bgResult,gtResult]=settled;
+  const bn=bnResult.status==='fulfilled'?bnResult.value:{symbols:[]};
+  const bnFundingInfo=bnFundingResult.status==='fulfilled'?bnFundingResult.value:[];
+  const bg=bgResult.status==='fulfilled'?bgResult.value:{data:[]};
+  const gt=gtResult.status==='fulfilled'?gtResult.value:[];
+  const errors={
+    binance:bnResult.status==='rejected'?String(bnResult.reason?.message||bnResult.reason):'',
+    bitget:bgResult.status==='rejected'?String(bgResult.reason?.message||bgResult.reason):'',
+    gate:gtResult.status==='rejected'?String(gtResult.reason?.message||gtResult.reason):''
+  };
+  if([bnResult,bgResult,gtResult].filter(x=>x.status==='fulfilled').length<2)throw new Error('少于两家交易所合约源可用 · '+Object.entries(errors).filter(([,v])=>v).map(([k,v])=>k+': '+v).join(' / '));
   const meta = { binance:new Map(), bitget:new Map(), gate:new Map() };
   const bnFunding = new Map((bnFundingInfo || []).map(x => [x.symbol, x]));
 
@@ -81,7 +92,7 @@ export async function loadContractUniverse(){
     universe.push({symbol,venues,venueCount:venues.length,assetClass,alias});
     if(venues.length===3) tripleCommon.push(symbol);
   }
-  return { universe, common:tripleCommon, tripleCommon, tradfiCount, meta, venuesBySymbol };
+  return { universe, common:tripleCommon, tripleCommon, tradfiCount, meta, venuesBySymbol, errors };
 }
 
 export function inferAssetClass(symbol,meta,venues=VENUES){
@@ -97,15 +108,29 @@ function parseFundingHours(v){
   const m = String(v).match(/(\d+)/); return m ? Number(m[1]) : null;
 }
 
+function epochMs(v){
+  const n=num(v);return n>0&&n<1e12?n*1000:n;
+}
+
 export async function pollMarket(meta){
   const started = Date.now();
-  const [bnBbo, bnPrem, bg, gt] = await Promise.all([
+  const settled=await Promise.allSettled([
     getJson(ENDPOINTS.binance.bbo),
     getJson(ENDPOINTS.binance.premium),
     getJson(ENDPOINTS.bitget.tickers),
     getJson(ENDPOINTS.gate.tickers)
   ]);
-  const out = { binance:new Map(), bitget:new Map(), gate:new Map(), fetchedAt:Date.now(), latencyMs:Date.now()-started, source:'REST' };
+  const [bnBboResult,bnPremResult,bgResult,gtResult]=settled;
+  const bnBbo=bnBboResult.status==='fulfilled'?bnBboResult.value:[];
+  const bnPrem=bnPremResult.status==='fulfilled'?bnPremResult.value:[];
+  const bg=bgResult.status==='fulfilled'?bgResult.value:{data:[]};
+  const gt=gtResult.status==='fulfilled'?gtResult.value:[];
+  const out = { binance:new Map(), bitget:new Map(), gate:new Map(), fetchedAt:Date.now(), latencyMs:Date.now()-started, source:'REST',errors:{
+    binance:bnBboResult.status==='rejected'?String(bnBboResult.reason?.message||bnBboResult.reason):'',
+    bitget:bgResult.status==='rejected'?String(bgResult.reason?.message||bgResult.reason):'',
+    gate:gtResult.status==='rejected'?String(gtResult.reason?.message||gtResult.reason):''
+  }};
+  if([bnBboResult,bgResult,gtResult].filter(x=>x.status==='fulfilled').length<2)throw new Error('少于两家交易所行情源可用');
   const prem = new Map((bnPrem || []).map(x => [x.symbol,x]));
 
   for(const x of bnBbo || []){
@@ -144,12 +169,13 @@ export async function pollMarket(meta){
 }
 
 export function quote(x){
+  const missingFields=['bid','ask','bidQty','askQty','mark','index','funding'].filter(key=>x[key]===undefined||x[key]===null||x[key]==='');
   return {
     venue:x.venue, symbol:x.symbol,
     bid:num(x.bid), ask:num(x.ask), bidQty:num(x.bidQty), askQty:num(x.askQty),
     last:num(x.last), mark:num(x.mark), index:num(x.index), funding:num(x.funding),
-    fundingIndicative:num(x.fundingIndicative), nextFundingTime:num(x.nextFundingTime),
+    fundingIndicative:num(x.fundingIndicative), nextFundingTime:epochMs(x.nextFundingTime),
     openInterest:num(x.openInterest), volumeQuote:num(x.volumeQuote), ts:num(x.ts) || Date.now(),
-    source:x.source || 'REST'
+    source:x.source || 'REST',missingFields
   };
 }
