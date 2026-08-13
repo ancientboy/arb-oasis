@@ -13,20 +13,27 @@ async function getJson(url, timeoutMs = 9000){
 }
 
 export async function loadContractUniverse(){
-  const [bn, bg, gt] = await Promise.all([
+  const [bn, bnFundingInfo, bg, gt] = await Promise.all([
     getJson(ENDPOINTS.binance.contracts),
+    getJson(ENDPOINTS.binance.fundingInfo),
     getJson(ENDPOINTS.bitget.contracts),
     getJson(ENDPOINTS.gate.contracts)
   ]);
   const meta = { binance:new Map(), bitget:new Map(), gate:new Map() };
+  const bnFunding = new Map((bnFundingInfo || []).map(x => [x.symbol, x]));
 
   for(const s of bn.symbols || []){
     if(s.contractType !== 'PERPETUAL' || s.status !== 'TRADING' || s.quoteAsset !== 'USDT') continue;
     const tags=[s.underlyingType,...(s.underlyingSubType||[])].filter(Boolean).join(' ').toLowerCase();
+    const f=bnFunding.get(s.symbol) || {};
     meta.binance.set(s.symbol, {
       symbol:s.symbol, base:s.baseAsset, quote:s.quoteAsset,
-      takerFeeBps:null, multiplier:1, fundingIntervalHours:8,
-      isRwa:/rwa|stock|equity|tradfi/.test(tags), underlyingType:s.underlyingType || '', underlyingSubType:s.underlyingSubType || []
+      takerFeeBps:null, multiplier:1,
+      fundingIntervalHours:num(f.fundingIntervalHours) || 8,
+      fundingRateCap:num(f.adjustedFundingRateCap) || null,
+      fundingRateFloor:num(f.adjustedFundingRateFloor) || null,
+      isRwa:/rwa|stock|equity|tradfi/.test(tags) || TRADFI_HINTS.has(s.baseAsset),
+      underlyingType:s.underlyingType || '', underlyingSubType:s.underlyingSubType || []
     });
   }
 
