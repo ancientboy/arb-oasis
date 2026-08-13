@@ -9,17 +9,18 @@ const els={
   universeCount:$('#universeCount'),tripleCount:$('#tripleCount'),tradfiCount:$('#tradfiCount'),bestEdge:$('#bestEdge'),bestEdgeSymbol:$('#bestEdgeSymbol'),eligibleCount:$('#eligibleCount'),venueHealth:$('#venueHealth'),connectionPill:$('#connectionPill'),universeNote:$('#universeNote'),
   body:$('#opportunityBody'),lastUpdate:$('#lastUpdate'),visibleCount:$('#visibleCount'),search:$('#searchInput'),minEdge:$('#minEdgeInput'),minCapacity:$('#minCapacityInput'),riskBuffer:$('#riskBufferInput'),maxMarkDev:$('#maxMarkDevInput'),fundingHorizon:$('#fundingHorizonInput'),
   bnFee:$('#binanceFeeInput'),bgFee:$('#bitgetFeeInput'),gtFee:$('#gateFeeInput'),scope:$('#scopeSegment'),refresh:$('#refreshMarketsBtn'),paperNotional:$('#paperNotional'),paperPositions:$('#paperPositions'),clearPaper:$('#clearPaperBtn'),events:$('#systemEvents'),
-  fundingLeaders:$('#fundingLeaders'),persistentRoutes:$('#persistentRoutes'),paperSummary:$('#paperSummary'),clearResearch:$('#clearResearchBtn'),historyWindow:$('#historyWindow'),reversalRisk:$('#reversalRisk'),tradfiCarry:$('#tradfiCarry'),settlementCalendar:$('#settlementCalendar'),researchCoverage:$('#researchCoverage'),sessionCarry:$('#sessionCarry')
+  fundingLeaders:$('#fundingLeaders'),persistentRoutes:$('#persistentRoutes'),paperSummary:$('#paperSummary'),clearResearch:$('#clearResearchBtn'),historyWindow:$('#historyWindow'),reversalRisk:$('#reversalRisk'),tradfiCarry:$('#tradfiCarry'),settlementCalendar:$('#settlementCalendar'),researchCoverage:$('#researchCoverage'),sessionCarry:$('#sessionCarry'),venueReliability:$('#venueReliability')
 };
 
 const history=new ResearchHistory({maxSamples:DEFAULTS.historyMaxSamples,topN:DEFAULTS.historyTopN});
 const fundingStats=new FundingStats();
 const serverFunding=new Map();
 const serverOpportunities=new Map();
+let serverHealth=[];
 const state={
   universe:[],tripleCommon:[],meta:null,market:null,opportunities:[],scope:'all',busy:false,streams:null,lastRender:0,renderTimer:null,
   venueStatus:Object.fromEntries(VENUES.map(v=>[v,{ok:false,last:0,error:'',mode:'REST'}])),
-  paper:JSON.parse(localStorage.getItem('arb-oasis-paper')||'[]'),events:[],lastServerWrite:0,serverWindow:'7d'
+  paper:JSON.parse(localStorage.getItem('arb-oasis-paper')||'[]'),events:[],lastServerWrite:0,lastMetadataWrite:0,serverWindow:'7d',fundingSchedules:parseStored('arb-oasis-funding-schedules',{})
 };
 
 function settings(){return {...DEFAULTS,minEdgeBps:num(els.minEdge.value),minCapacityUsdt:num(els.minCapacity.value),riskBufferBps:num(els.riskBuffer.value),maxMarkDevBps:num(els.maxMarkDev.value),fundingHorizonHours:Math.max(1,num(els.fundingHorizon.value)||8),feesBps:{binance:num(els.bnFee.value),bitget:num(els.bgFee.value),gate:num(els.gtFee.value)}}}
@@ -93,13 +94,23 @@ function rebuild(){
 async function syncServerHistory(opportunities){
   const now=Date.now();if(now-state.lastServerWrite<120000)return;state.lastServerWrite=now;
   const observations=opportunities.slice(0,80).map(x=>({id:x.id,symbol:x.symbol,assetClass:x.assetClass,longVenue:x.longVenue,shortVenue:x.shortVenue,fundingHourlyBps:x.fundingHourlyBps,spreadBps:x.spreadBps,netEdgeBps:x.netEdgeBps,capacity:x.capacity,score:x.score,eligible:x.eligible,observedAt:now}));
-  try{const res=await fetch('/api/history',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({observations})});if(!res.ok)throw new Error(`HTTP ${res.status}`);await loadServerHistory();}
+  const symbols=[...new Set(opportunities.slice(0,20).map(x=>x.symbol))];
+  const markets=[];for(const venue of VENUES)for(const symbol of symbols){const q=state.market?.[venue]?.get(symbol);if(q)markets.push({...q,venue,symbol,qualityOk:!(q.missingFields||[]).length&&now-q.ts<DEFAULTS.staleMs*2,observedAt:now});}
+  const venueHealth=VENUES.map(venue=>{const status=state.venueStatus[venue];return {venue,ok:status.ok&&now-status.last<DEFAULTS.staleMs*2,mode:status.mode,quoteCount:state.market?.[venue]?.size||0,latencyMs:state.market?.latencyMs||0,error:status.error,observedAt:now};});
+  const settlements=collectSettlements(now);let contracts=[];
+  if(now-state.lastMetadataWrite>=600000){state.lastMetadataWrite=now;const classes=new Map(state.universe.map(item=>[item.symbol,item.assetClass]));for(const venue of VENUES)for(const [symbol,m] of state.meta[venue])contracts.push({venue,symbol,venueSymbol:m.gateSymbol||m.symbol||symbol,base:m.base||symbol.slice(0,-4),quote:m.quote||'USDT',assetClass:classes.get(symbol)||'crypto',fundingIntervalHours:m.fundingIntervalHours,takerFeeBps:m.takerFeeBps,makerFeeBps:m.makerFeeBps,multiplier:m.multiplier,source:m.fallbackMetadata?'fallback':'exchange',observedAt:now});}
+  try{const res=await fetch('/api/history',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({observations,markets,venueHealth,settlements,contracts})});if(!res.ok)throw new Error(`HTTP ${res.status}`);await loadServerHistory();}
   catch(err){state.lastServerWrite=now-45000;pushEvent(`服务端历史暂不可用，继续使用本机统计：${err.message}`,'warn');}
 }
 
 async function loadServerHistory(){
-  try{const [fundingRes,opportunityRes]=await Promise.all([fetch(`/api/history?metric=funding&window=${state.serverWindow}`,{cache:'no-store'}),fetch(`/api/history?metric=opportunity&window=${state.serverWindow}`,{cache:'no-store'})]);if(!fundingRes.ok||!opportunityRes.ok)throw new Error('history unavailable');const [fundingData,opportunityData]=await Promise.all([fundingRes.json(),opportunityRes.json()]);serverFunding.clear();serverOpportunities.clear();for(const stat of fundingData.routes||[])serverFunding.set(stat.id,stat);for(const stat of opportunityData.routes||[])serverOpportunities.set(stat.id,stat);renderResearch();}
-  catch{serverFunding.clear();serverOpportunities.clear();}
+  try{const [fundingRes,opportunityRes,healthRes]=await Promise.all([fetch(`/api/history?metric=funding&window=${state.serverWindow}`,{cache:'no-store'}),fetch(`/api/history?metric=opportunity&window=${state.serverWindow}`,{cache:'no-store'}),fetch(`/api/history?metric=health&window=${state.serverWindow}`,{cache:'no-store'})]);if(!fundingRes.ok||!opportunityRes.ok||!healthRes.ok)throw new Error('history unavailable');const [fundingData,opportunityData,healthData]=await Promise.all([fundingRes.json(),opportunityRes.json(),healthRes.json()]);serverFunding.clear();serverOpportunities.clear();for(const stat of fundingData.routes||[])serverFunding.set(stat.id,stat);for(const stat of opportunityData.routes||[])serverOpportunities.set(stat.id,stat);serverHealth=healthData.venues||[];renderResearch();}
+  catch{serverFunding.clear();serverOpportunities.clear();serverHealth=[];}
+}
+
+function collectSettlements(now){
+  const settled=[];for(const venue of VENUES)for(const [symbol,q] of state.market?.[venue]||[]){if(!q.nextFundingTime)continue;const key=`${venue}:${symbol}`,previous=state.fundingSchedules[key];if(previous?.time&&q.nextFundingTime>previous.time&&previous.time<=now+300000)settled.push({venue,symbol,fundingRate:previous.rate,settledAt:previous.time,observedAt:now});state.fundingSchedules[key]={time:q.nextFundingTime,rate:q.funding};}
+  localStorage.setItem('arb-oasis-funding-schedules',JSON.stringify(state.fundingSchedules));return settled;
 }
 
 function filtered(){
@@ -136,13 +147,14 @@ function renderHealth(){
 function openPaper(id){
   const x=state.opportunities.find(o=>o.id===id);if(!x||!x.eligible)return;const notional=Math.max(100,num(els.paperNotional.value)||10000);const s=settings();
   const entryFees=notional*2*((s.feesBps[x.longVenue]+s.feesBps[x.shortVenue])/10000);
-  state.paper.unshift({id:`p-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,openedAt:Date.now(),symbol:x.symbol,assetClass:x.assetClass,longVenue:x.longVenue,shortVenue:x.shortVenue,longAsk:x.longAsk,shortBid:x.shortBid,notional,entryFees,entrySpreadBps:x.spreadBps,entryFundingHourlyBps:x.fundingHourlyBps,entryFundingBps:x.fundingHorizonBps});
+  const position={id:`p-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,openedAt:Date.now(),symbol:x.symbol,assetClass:x.assetClass,longVenue:x.longVenue,shortVenue:x.shortVenue,longAsk:x.longAsk,shortBid:x.shortBid,notional,entryFees,entrySpreadBps:x.spreadBps,entryFundingHourlyBps:x.fundingHourlyBps,entryFundingBps:x.fundingHorizonBps};state.paper.unshift(position);syncPaperEvent('open',position);
   savePaper();renderPaper();pushEvent(`Paper 开仓 ${x.symbol}: Long ${x.longLabel} / Short ${x.shortLabel}`,'ok');
 }
 function closePaper(id){
   const p=state.paper.find(x=>x.id===id);if(!p)return;const pnl=state.market?exitPnl(p,state.market,settings().feesBps):null;
-  if(pnl)saveClosedTrade({...p,...pnl,closedAt:Date.now()});pushEvent(`Paper 平仓 ${p.symbol}${pnl?`，净 PnL ${pnl.net>=0?'+':''}$${f(pnl.net,2)}`:''}`,pnl?.net>=0?'ok':'warn');state.paper=state.paper.filter(x=>x.id!==id);savePaper();renderPaper();renderResearch();
+  if(pnl){saveClosedTrade({...p,...pnl,closedAt:Date.now()});syncPaperEvent('close',{...p,...pnl,closedAt:Date.now()});}pushEvent(`Paper 平仓 ${p.symbol}${pnl?`，净 PnL ${pnl.net>=0?'+':''}$${f(pnl.net,2)}`:''}`,pnl?.net>=0?'ok':'warn');state.paper=state.paper.filter(x=>x.id!==id);savePaper();renderPaper();renderResearch();
 }
+async function syncPaperEvent(event,p){try{await fetch('/api/history',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({paperEvents:[{tradeId:p.id,event,symbol:p.symbol,longVenue:p.longVenue,shortVenue:p.shortVenue,notional:p.notional,netPnl:p.net,details:{entrySpreadBps:p.entrySpreadBps,entryFundingHourlyBps:p.entryFundingHourlyBps,longAsk:p.longAsk,shortBid:p.shortBid,longExit:p.longExit,shortExit:p.shortExit},observedAt:event==='close'?p.closedAt:p.openedAt}]})});}catch{}}
 function savePaper(){localStorage.setItem('arb-oasis-paper',JSON.stringify(state.paper));}
 function renderPaper(){
   if(!state.paper.length){els.paperPositions.innerHTML='<div class="empty-state">还没有模拟仓位</div>';return;}
@@ -158,11 +170,13 @@ function renderResearch(){
   const settlements=[];const seen=new Set();for(const x of state.opportunities){for(const side of ['long','short']){const venue=x[side+'Venue'],time=x[side+'NextFundingTime'],rate=x[side+'Funding'];const key=x.symbol+':'+venue;if(time>Date.now()&&!seen.has(key)){seen.add(key);settlements.push({symbol:x.symbol,venue,time,rate});}}}settlements.sort((a,b)=>a.time-b.time);els.settlementCalendar.innerHTML=settlements.length?settlements.slice(0,10).map(x=>`<div class="research-row"><div><b>${x.symbol}</b><span>${LABELS[x.venue]}</span></div><div><strong>${new Date(x.time).toLocaleTimeString()}</strong><small>${new Date(x.time).toLocaleDateString()} · Funding ${pct(x.rate*100,4)}</small></div></div>`).join(''):'<div class="empty-state">当前行情未返回下一结算时间</div>';
   const fundingSamples=[...serverFunding.values()].reduce((sum,x)=>sum+x.count,0);const opportunitySamples=[...serverOpportunities.values()].reduce((sum,x)=>sum+x.count,0);els.researchCoverage.innerHTML=`<div class="research-row"><div><b>${state.serverWindow.toUpperCase()}</b><span>当前服务端窗口</span></div><div><strong>${fundingSamples.toLocaleString()}</strong><small>Funding 样本</small></div></div><div class="research-row"><div><b>${serverOpportunities.size}</b><span>已观察路线</span></div><div><strong>${opportunitySamples.toLocaleString()}</strong><small>机会快照</small></div></div>`;
   const sessionRows=[...serverFunding.values()].filter(x=>x.count>=2).flatMap(x=>(x.sessions||[]).map(s=>({...s,symbol:x.symbol,longVenue:x.longVenue,shortVenue:x.shortVenue,currentStreakSign:x.currentStreakSign,currentStreakLength:x.currentStreakLength}))).sort((a,b)=>b.avgHourlyBps-a.avgHourlyBps).slice(0,10);els.sessionCarry.innerHTML=sessionRows.length?sessionRows.map(x=>`<div class="research-row"><div><b>${x.symbol}</b><span>${LABELS[x.longVenue]} L / ${LABELS[x.shortVenue]} S · ${x.name}</span></div><div><strong class="${x.avgHourlyBps>=0?'positive':'negative'}">${bp(x.avgHourlyBps)} bp/h</strong><small>正向 ${f(x.positiveRate*100,0)}% · 连续 ${x.currentStreakSign>0?'+':x.currentStreakSign<0?'-':'—'}${x.currentStreakLength||0} · n${x.count}</small></div></div>`).join(''):'<div class="empty-state">至少积累 2 个服务端样本后显示</div>';
+  els.venueReliability.innerHTML=serverHealth.some(x=>x.count)?serverHealth.map(x=>`<div class="research-row"><div><b>${LABELS[x.venue]||x.venue}</b><span>${x.lastMode||'—'} · n${x.count}</span></div><div><strong class="${x.uptimeRate>=.95?'positive':x.uptimeRate<.8?'negative':''}">${f(x.uptimeRate*100,1)}%</strong><small>可用率 · 平均延迟 ${f(x.avgLatencyMs,0)}ms${x.lastError?' · '+escapeHtml(x.lastError):''}</small></div></div>`).join(''):'<div class="empty-state">等待服务端健康样本</div>';
   const ps=paperSummary();els.paperSummary.innerHTML=`<div><b>${ps.count}</b><span>已平仓</span></div><div><b class="${ps.pnl>=0?'positive':'negative'}">${ps.pnl>=0?'+':''}$${f(ps.pnl,2)}</b><span>累计净 PnL</span></div><div><b>${f(ps.winRate*100,0)}%</b><span>胜率</span></div><div><b>${f(ps.avgHoldMin,1)}m</b><span>平均持仓</span></div>`;
 }
 
 function pushEvent(text,level='info'){state.events.unshift({text,level,time:Date.now()});state.events=state.events.slice(0,10);renderEvents();}
 function renderEvents(){if(!state.events.length){els.events.innerHTML='<div class="empty-state">系统事件会显示在这里</div>';return;}els.events.innerHTML=state.events.map(e=>`<div class="event-item"><span class="event-title">${e.level==='bad'?'⚠ ':e.level==='ok'?'● ':''}${escapeHtml(e.text)}</span><span class="event-time">${new Date(e.time).toLocaleTimeString()}</span></div>`).join('');}
 function escapeHtml(s){return String(s).replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]||c));}
+function parseStored(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'')||fallback}catch{return fallback}}
 
 init();

@@ -34,4 +34,5 @@ test("renders development preview metadata", async () => {
   assert.match(html, developmentPreviewMeta);
   const dashboard = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(dashboard, /Carry by Session/);
+  assert.match(dashboard, /Venue Reliability/);
 });

@@ -103,9 +103,9 @@ Capture:
 
 ### 2. Time-series database
 
-Initial D1 schema implemented for funding observations and opportunity snapshots.
-Contract metadata, venue health, settlement history, depth snapshots and shadow
-trade observations remain incomplete.
+The D1 schema now covers funding observations, opportunity and raw market snapshots,
+contract metadata, venue health, observed funding settlements and shadow-trade events.
+Order-book depth snapshots remain incomplete.
 
 Preferred implementation may use PostgreSQL + TimescaleDB or another suitable time-series store.
 
@@ -121,8 +121,9 @@ Required tables/models:
 
 ### 3. Historical API
 
-Initial `GET/POST /api/history` implemented for persistent funding observations,
-opportunity snapshots, and 7d/30d route Carry statistics.
+`GET/POST /api/history` now persists funding, opportunities, sampled market state,
+metadata, venue health, observed settlements and paper events. It exposes funding,
+opportunity, health, settlement, contract and symbol-market history metrics.
 
 Expose endpoints for:
 
@@ -138,8 +139,8 @@ Expose endpoints for:
 The Funding Carry Desk now switches between server-backed 24h/7d/30d/90d statistics
 and falls back to current/local statistics when the API is unavailable. It includes
 Carry Leaders, Persistent Edge, Reversal Risk, TradFi Carry, break-even holding
-estimates, Settlement Calendar and research coverage. Richer session breakdowns
-remain incomplete.
+estimates, Settlement Calendar, session breakdowns, research coverage and historical
+venue reliability.
 
 Replace local-only statistics with server-backed historical windows.
 
