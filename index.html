@@ -3,38 +3,37 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="ArbOasis - Binance, Bitget and Gate cross-venue perpetual arbitrage research scanner" />
-  <title>ArbOasis · Cross-Venue Arbitrage Scanner</title>
+  <meta name="description" content="ArbOasis - Binance, Bitget and Gate cross-venue spread, funding carry and TradFi/RWA perpetual arbitrage research scanner" />
+  <title>ArbOasis · Cross-Venue Alpha Research</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <div class="app-shell">
-    <header class="topbar">
-      <div class="brand-wrap"><div class="brand-mark">AO</div><div><div class="brand">ArbOasis</div><div class="subtitle">Cross-Venue Perpetual Arbitrage Research</div></div></div>
-      <div class="top-actions"><div id="connectionPill" class="status-pill status-warn"><span class="status-dot"></span><span>Connecting</span></div><button id="refreshMarketsBtn" class="ghost-btn">刷新合约池</button></div>
-    </header>
-    <main>
-      <section class="hero-grid">
-        <article class="hero-card primary-card"><div class="eyebrow">LIVE UNIVERSE</div><div class="hero-value" id="commonCount">—</div><div class="hero-label">三所共同 USDT 永续合约</div><div class="hero-foot" id="universeNote">正在读取 Binance / Bitget / Gate 合约清单</div></article>
-        <article class="hero-card"><div class="eyebrow">BEST NET EDGE</div><div class="hero-value" id="bestEdge">—</div><div class="hero-label">完全收敛 + 当前 Funding 差 - 成本</div><div class="hero-foot" id="bestEdgeSymbol">等待实时盘口</div></article>
-        <article class="hero-card"><div class="eyebrow">EXECUTABLE</div><div class="hero-value" id="eligibleCount">—</div><div class="hero-label">通过风险与流动性过滤的方向</div><div class="hero-foot">每个共同合约最多扫描 6 个跨所方向</div></article>
-        <article class="hero-card"><div class="eyebrow">VENUE HEALTH</div><div class="venue-health" id="venueHealth"></div><div class="hero-label">数据新鲜度与接口状态</div></article>
-      </section>
-      <section class="panel controls-panel">
-        <div class="panel-title-row"><div><h2>机会扫描器</h2><p>使用真实 Bid/Ask，按方向计算价差；共同合约列表自动取三所交集。</p></div><div class="segmented" id="scopeSegment"><button data-scope="all" class="active">全部共同合约</button><button data-scope="liquid">高流动性</button><button data-scope="positive">仅正净 Edge</button></div></div>
-        <div class="controls-grid">
-          <label>搜索标的<input id="searchInput" placeholder="BTC / ETH / SOL..." /></label><label>最低净 Edge (bp)<input id="minEdgeInput" type="number" step="0.1" value="0" /></label><label>最低 BBO 容量 (USDT)<input id="minCapacityInput" type="number" step="100" value="5000" /></label><label>风险缓冲 (bp)<input id="riskBufferInput" type="number" step="0.1" value="1.5" /></label><label>Binance 费率假设 / 次 (bp)<input id="binanceFeeInput" type="number" step="0.1" value="5" /></label><label>Bitget fallback / 次 (bp)<input id="bitgetFeeInput" type="number" step="0.1" value="6" /></label><label>Gate fallback / 次 (bp)<input id="gateFeeInput" type="number" step="0.1" value="7.5" /></label><label>Mark/Index 最大偏离 (bp)<input id="maxMarkDevInput" type="number" step="1" value="40" /></label>
-        </div>
-        <div class="assumption-note">净 Edge 模型 = 建仓可成交价差 + 当前 Funding 差 − 双边开/平仓费 − 风险缓冲。Funding 是否实际结算取决于持仓跨过结算时点；当前版本用于机会排序，不代表锁定收益。</div>
-      </section>
-      <section class="panel table-panel">
-        <div class="table-toolbar"><div class="toolbar-left"><span id="lastUpdate">尚未更新</span><span class="divider"></span><span id="visibleCount">0 个方向</span></div><div class="toolbar-right"><label class="inline-label">Paper Notional <input id="paperNotional" type="number" value="10000" step="1000" min="100" /></label></div></div>
-        <div class="table-wrap"><table><thead><tr><th>标的</th><th>方向</th><th>Long Ask</th><th>Short Bid</th><th>价差 bp</th><th>Funding Δ bp</th><th>成本 bp</th><th>净 Edge bp</th><th>BBO 容量</th><th>风险</th><th></th></tr></thead><tbody id="opportunityBody"><tr><td colspan="11" class="empty-cell">正在初始化市场数据…</td></tr></tbody></table></div>
-      </section>
-      <section class="two-col"><section class="panel"><div class="panel-title-row compact"><div><h2>Paper Trading</h2><p>只在浏览器本地记录，不连接账户、不发送真实订单。</p></div><button id="clearPaperBtn" class="ghost-btn danger-text">清空</button></div><div id="paperPositions" class="paper-list"><div class="empty-state">还没有模拟仓位</div></div></section><section class="panel"><div class="panel-title-row compact"><div><h2>系统状态</h2><p>任何异常都应优先阻止开仓，而不是提高套利阈值。</p></div></div><div id="systemEvents" class="event-list"></div></section></section>
-    </main>
-    <footer><span>ArbOasis v0 · Research / Paper Trading only</span><span>Public market data · No API keys</span></footer>
-  </div>
-  <script type="module" src="./src/app.js"></script>
-</body>
-</html>
+<div class="app-shell">
+<header class="topbar"><div class="brand-wrap"><div class="brand-mark">AO</div><div><div class="brand">ArbOasis</div><div class="subtitle">Cross-Venue Spread · Funding Carry · TradFi/RWA</div></div></div><div class="top-actions"><div id="connectionPill" class="status-pill status-warn"><span class="status-dot"></span><span>Connecting</span></div><button id="refreshMarketsBtn" class="ghost-btn">刷新合约池</button></div></header>
+<main>
+<section class="hero-grid five">
+  <article class="hero-card primary-card"><div class="eyebrow">2+ VENUE UNIVERSE</div><div class="hero-value" id="universeCount">—</div><div class="hero-label">至少两所共同 USDT 永续</div><div class="hero-foot" id="universeNote">同步 Binance / Bitget / Gate 合约清单</div></article>
+  <article class="hero-card"><div class="eyebrow">3 VENUE COMMON</div><div class="hero-value" id="tripleCount">—</div><div class="hero-label">三所同时存在的标的</div><div class="hero-foot">Crypto 主池与高流动性基准</div></article>
+  <article class="hero-card tradfi-card"><div class="eyebrow">TRADFI / RWA</div><div class="hero-value" id="tradfiCount">—</div><div class="hero-label">股票 / ETF / RWA 类永续</div><div class="hero-foot">允许任意两所共同，不要求三所齐全</div></article>
+  <article class="hero-card"><div class="eyebrow">BEST NET EDGE</div><div class="hero-value" id="bestEdge">—</div><div class="hero-label">价差 + Funding Horizon - 成本</div><div class="hero-foot" id="bestEdgeSymbol">等待实时盘口</div></article>
+  <article class="hero-card"><div class="eyebrow">EXECUTABLE</div><div class="hero-value" id="eligibleCount">—</div><div class="hero-label">通过风险/容量过滤的方向</div><div class="venue-health" id="venueHealth"></div></article>
+</section>
+
+<section class="panel controls-panel"><div class="panel-title-row"><div><h2>统一机会扫描器</h2><p>同币种跨所价差、Funding Carry 与 TradFi/RWA 放在同一评分框架中。</p></div><div class="segmented" id="scopeSegment"><button data-scope="all" class="active">全部 2+ 所</button><button data-scope="triple">三所共同</button><button data-scope="tradfi">TradFi/RWA</button><button data-scope="crypto">Crypto</button><button data-scope="positive">正净 Edge</button><button data-scope="liquid">高流动性</button></div></div>
+<div class="controls-grid"><label>搜索标的<input id="searchInput" placeholder="BTC / AAPL / NVDA..." /></label><label>最低净 Edge (bp)<input id="minEdgeInput" type="number" step="0.1" value="0" /></label><label>最低 BBO 容量 (USDT)<input id="minCapacityInput" type="number" step="100" value="5000" /></label><label>Funding 评估时长 (h)<input id="fundingHorizonInput" type="number" step="1" value="8" min="1" /></label><label>风险缓冲 (bp)<input id="riskBufferInput" type="number" step="0.1" value="1.5" /></label><label>Binance 费率 / 次 (bp)<input id="binanceFeeInput" type="number" step="0.1" value="5" /></label><label>Bitget fallback / 次 (bp)<input id="bitgetFeeInput" type="number" step="0.1" value="6" /></label><label>Gate fallback / 次 (bp)<input id="gateFeeInput" type="number" step="0.1" value="7.5" /></label><label>Mark/Index 最大偏离 (bp)<input id="maxMarkDevInput" type="number" step="1" value="40" /></label></div>
+<div class="assumption-note">当前净 Edge = 可成交建仓价差 + 按各所结算周期标准化后的 Funding Carry × 评估时长 − 双边开/平仓费 − 风险缓冲。历史 Carry APR 使用已观察 Funding 差的小时均值简单年化，只用于研究，不代表锁定收益。</div></section>
+
+<section class="panel table-panel"><div class="table-toolbar"><div class="toolbar-left"><span id="lastUpdate">尚未更新</span><span class="divider"></span><span id="visibleCount">0 个方向</span></div><div class="toolbar-right"><label class="inline-label">Paper Notional <input id="paperNotional" type="number" value="10000" step="1000" min="100" /></label></div></div>
+<div class="table-wrap"><table><thead><tr><th>类别</th><th>标的</th><th>方向</th><th>Long Ask</th><th>Short Bid</th><th>Spread bp</th><th>Funding Δ /h</th><th>当前 Carry APR</th><th>历史 Carry APR</th><th>Funding 持续性</th><th>Net Edge</th><th>BBO 容量</th><th>风险</th><th></th></tr></thead><tbody id="opportunityBody"><tr><td colspan="14" class="empty-cell">正在初始化市场数据…</td></tr></tbody></table></div></section>
+
+<section class="research-grid">
+  <section class="panel"><div class="panel-title-row compact"><div><h2>Funding Carry Leaders</h2><p>按已观察 Funding 差小时均值年化排序；同时显示 P90 与正向持续率。</p></div></div><div id="fundingLeaders" class="research-list"><div class="empty-state">Funding 历史正在积累</div></div></section>
+  <section class="panel"><div class="panel-title-row compact"><div><h2>Persistent Edge</h2><p>统计某方向进入 Top Opportunity 的出现率、平均 Edge 与最大 Edge。</p></div></div><div id="persistentRoutes" class="research-list"><div class="empty-state">Edge 历史正在积累</div></div></section>
+</section>
+
+<section class="two-col"><section class="panel"><div class="panel-title-row compact"><div><h2>Paper Trading</h2><p>浏览器本地模拟，不连接账户、不发送真实订单。</p></div><button id="clearPaperBtn" class="ghost-btn danger-text">清空持仓</button></div><div id="paperSummary" class="paper-summary"></div><div id="paperPositions" class="paper-list"><div class="empty-state">还没有模拟仓位</div></div></section><section class="panel"><div class="panel-title-row compact"><div><h2>系统状态</h2><p>WebSocket 为主，REST 周期性校准；异常优先阻止开仓。</p></div><button id="clearResearchBtn" class="ghost-btn">清空研究统计</button></div><div id="systemEvents" class="event-list"></div></section></section>
+</main>
+<footer><span>ArbOasis v1 · Research / Paper Trading only</span><span>Public market data · No API keys · Local research history</span></footer>
+</div>
+<script type="module" src="./src/app.js"></script>
+</body></html>
