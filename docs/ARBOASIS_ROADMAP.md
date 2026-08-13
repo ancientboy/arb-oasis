@@ -62,7 +62,7 @@ Priority: highest.
 
 Status: in progress. The first Sites/D1 slice now persists funding observations and
 spread/opportunity snapshots, exposes a 7d/30d Carry statistics API, and lets the
-dashboard prefer server-backed 7d Carry statistics with a local fallback.
+dashboard switch between server-backed 7d/30d Carry statistics with a local fallback.
 
 The browser localStorage research history is temporary. The next major milestone is durable historical data.
 
@@ -123,9 +123,9 @@ Expose endpoints for:
 
 ### 4. UI integration
 
-Funding Carry Leaders now prefers server-backed 7d statistics and falls back to
-browser-local statistics when the API is unavailable. Dedicated 30d selection and
-the complete Funding Carry Desk remain incomplete.
+The Funding Carry Desk now switches between server-backed 7d/30d statistics and
+falls back to browser-local statistics when the API is unavailable. Settlement
+calendar and richer session breakdowns remain incomplete.
 
 Replace local-only statistics with server-backed historical windows.
 
@@ -182,6 +182,10 @@ Priority: high.
 This is expected to be one of ArbOasis's main research differentiators.
 
 ## Phase 3A — Crypto venue vs crypto venue
+
+Status: initial explicit alias layer added. It preserves GOOG/GOOGL as distinct
+share classes and marks unverified mappings such as GOLD→XAU for review rather
+than silently treating them as equivalent. The mapping catalog remains incomplete.
 
 Improve identification and mapping of stock/ETF/commodity perpetuals across Binance, Bitget and Gate.
 

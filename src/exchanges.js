@@ -1,4 +1,5 @@
 import { ENDPOINTS, TRADFI_HINTS, VENUES } from './config.js';
+import { resolveTradFiAlias } from './aliases.js';
 
 export const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 
@@ -75,7 +76,9 @@ export async function loadContractUniverse(){
     if(venues.length<2) continue;
     const assetClass=inferAssetClass(symbol,meta,venues);
     if(assetClass==='tradfi') tradfiCount++;
-    universe.push({symbol,venues,venueCount:venues.length,assetClass});
+    const base=symbol.endsWith('USDT')?symbol.slice(0,-4):symbol;
+    const alias=assetClass==='tradfi'?resolveTradFiAlias(base):null;
+    universe.push({symbol,venues,venueCount:venues.length,assetClass,alias});
     if(venues.length===3) tripleCommon.push(symbol);
   }
   return { universe, common:tripleCommon, tripleCommon, tradfiCount, meta, venuesBySymbol };

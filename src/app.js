@@ -9,7 +9,7 @@ const els={
   universeCount:$('#universeCount'),tripleCount:$('#tripleCount'),tradfiCount:$('#tradfiCount'),bestEdge:$('#bestEdge'),bestEdgeSymbol:$('#bestEdgeSymbol'),eligibleCount:$('#eligibleCount'),venueHealth:$('#venueHealth'),connectionPill:$('#connectionPill'),universeNote:$('#universeNote'),
   body:$('#opportunityBody'),lastUpdate:$('#lastUpdate'),visibleCount:$('#visibleCount'),search:$('#searchInput'),minEdge:$('#minEdgeInput'),minCapacity:$('#minCapacityInput'),riskBuffer:$('#riskBufferInput'),maxMarkDev:$('#maxMarkDevInput'),fundingHorizon:$('#fundingHorizonInput'),
   bnFee:$('#binanceFeeInput'),bgFee:$('#bitgetFeeInput'),gtFee:$('#gateFeeInput'),scope:$('#scopeSegment'),refresh:$('#refreshMarketsBtn'),paperNotional:$('#paperNotional'),paperPositions:$('#paperPositions'),clearPaper:$('#clearPaperBtn'),events:$('#systemEvents'),
-  fundingLeaders:$('#fundingLeaders'),persistentRoutes:$('#persistentRoutes'),paperSummary:$('#paperSummary'),clearResearch:$('#clearResearchBtn')
+  fundingLeaders:$('#fundingLeaders'),persistentRoutes:$('#persistentRoutes'),paperSummary:$('#paperSummary'),clearResearch:$('#clearResearchBtn'),historyWindow:$('#historyWindow')
 };
 
 const history=new ResearchHistory({maxSamples:DEFAULTS.historyMaxSamples,topN:DEFAULTS.historyTopN});
@@ -33,6 +33,7 @@ async function init(){bind();renderPaper();renderResearch();await loadServerHist
 function bind(){
   [els.search,els.minEdge,els.minCapacity,els.riskBuffer,els.maxMarkDev,els.fundingHorizon,els.bnFee,els.bgFee,els.gtFee].forEach(e=>e?.addEventListener('input',rebuild));
   els.scope?.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;state.scope=b.dataset.scope;[...els.scope.children].forEach(x=>x.classList.toggle('active',x===b));renderTable();});
+  els.historyWindow?.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;state.serverWindow=b.dataset.window;[...els.historyWindow.children].forEach(x=>x.classList.toggle('active',x===b));serverFunding.clear();renderResearch();loadServerHistory();});
   els.refresh?.addEventListener('click',refreshUniverse);
   els.body?.addEventListener('click',e=>{const b=e.target.closest('[data-paper]');if(b)openPaper(b.dataset.paper);});
   els.paperPositions?.addEventListener('click',e=>{const b=e.target.closest('[data-close]');if(b)closePaper(b.dataset.close);});
@@ -140,7 +141,7 @@ function renderPaper(){
 
 function renderResearch(){
   const remote=[...serverFunding.values()].filter(x=>x.count>=2).slice(0,10).map(x=>({symbol:x.symbol,longVenue:x.longVenue,shortVenue:x.shortVenue,stat:x}));
-  const leaders=remote.length?remote:fundingStats.leaders(state.opportunities,10);els.fundingLeaders.innerHTML=leaders.length?leaders.map(x=>`<div class="research-row"><div><b>${x.symbol}</b><span>${LABELS[x.longVenue]} L / ${LABELS[x.shortVenue]} S</span></div><div><strong class="${x.stat.annualizedPct>=0?'positive':'negative'}">${pct(x.stat.annualizedPct)}</strong><small>${remote.length?state.serverWindow+' 服务端':'本机'}均值 · P90 ${bp(x.stat.p90HourlyBps)} bp/h · 正向 ${f(x.stat.positiveRate*100,0)}% · n${x.stat.count}</small></div></div>`).join(''):'<div class="empty-state">Funding 历史正在积累，至少需要 2 个统计样本</div>';
+  const leaders=remote.length?remote:fundingStats.leaders(state.opportunities,10);els.fundingLeaders.innerHTML=leaders.length?leaders.map(x=>`<div class="research-row"><div><b>${x.symbol}</b><span>${LABELS[x.longVenue]} L / ${LABELS[x.shortVenue]} S</span></div><div><strong class="${x.stat.annualizedPct>=0?'positive':'negative'}">${pct(x.stat.annualizedPct)}</strong><small>${remote.length?state.serverWindow+' 服务端':'本机'}均值 · P10/P90 ${bp(x.stat.p10HourlyBps)} / ${bp(x.stat.p90HourlyBps)} bp/h · 正向 ${f(x.stat.positiveRate*100,0)}% · 反转 ${x.stat.reversals||0} · n${x.stat.count}</small></div></div>`).join(''):'<div class="empty-state">Funding 历史正在积累，至少需要 2 个统计样本</div>';
   const persistent=history.stats(state.opportunities).slice(0,10);els.persistentRoutes.innerHTML=persistent.length?persistent.map(x=>`<div class="research-row"><div><b>${x.symbol}</b><span>${LABELS[x.longVenue]} L / ${LABELS[x.shortVenue]} S</span></div><div><strong>${f(x.persistence*100,0)}%</strong><small>出现率 · 平均 Edge ${bp(x.avg)} bp · 最大 ${bp(x.max)} bp</small></div></div>`).join(''):'<div class="empty-state">Edge 持续性数据正在积累</div>';
   const ps=paperSummary();els.paperSummary.innerHTML=`<div><b>${ps.count}</b><span>已平仓</span></div><div><b class="${ps.pnl>=0?'positive':'negative'}">${ps.pnl>=0?'+':''}$${f(ps.pnl,2)}</b><span>累计净 PnL</span></div><div><b>${f(ps.winRate*100,0)}%</b><span>胜率</span></div><div><b>${f(ps.avgHoldMin,1)}m</b><span>平均持仓</span></div>`;
 }
