@@ -58,7 +58,7 @@ Sites backend proxy so browser CORS/region restrictions do not blank the scanner
 
 ### P0 remaining hardening
 
-- verify every exchange WebSocket subscription against current production behavior
+- verify every exchange WebSocket subscription against current production behavior (verified in Sites preview; venue health now requires a real market event, not only an open socket)
 - improve contract-symbol equivalence for TradFi aliases
 - add full-depth sequence/book integrity validation
 
