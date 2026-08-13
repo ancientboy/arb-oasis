@@ -60,11 +60,18 @@ Status: substantially implemented.
 
 Priority: highest.
 
+Status: in progress. The first Sites/D1 slice now persists funding observations and
+spread/opportunity snapshots, exposes a 7d/30d Carry statistics API, and lets the
+dashboard prefer server-backed 7d Carry statistics with a local fallback.
+
 The browser localStorage research history is temporary. The next major milestone is durable historical data.
 
 ## Deliverables
 
 ### 1. Backend collector service
+
+Initial browser-to-backend snapshot collector implemented; a continuously running
+independent collector remains incomplete.
 
 Collect public market data continuously from Binance, Bitget and Gate.
 
@@ -84,6 +91,10 @@ Capture:
 
 ### 2. Time-series database
 
+Initial D1 schema implemented for funding observations and opportunity snapshots.
+Contract metadata, venue health, settlement history, depth snapshots and shadow
+trade observations remain incomplete.
+
 Preferred implementation may use PostgreSQL + TimescaleDB or another suitable time-series store.
 
 Required tables/models:
@@ -98,6 +109,9 @@ Required tables/models:
 
 ### 3. Historical API
 
+Initial `GET/POST /api/history` implemented for persistent funding observations,
+opportunity snapshots, and 7d/30d route Carry statistics.
+
 Expose endpoints for:
 
 - funding history
@@ -108,6 +122,10 @@ Expose endpoints for:
 - session statistics
 
 ### 4. UI integration
+
+Funding Carry Leaders now prefers server-backed 7d statistics and falls back to
+browser-local statistics when the API is unavailable. Dedicated 30d selection and
+the complete Funding Carry Desk remain incomplete.
 
 Replace local-only statistics with server-backed historical windows.
 

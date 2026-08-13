@@ -85,7 +85,7 @@ export class FundingStats {
   }
 
   clear(){this.data={};localStorage.removeItem(FUNDING_KEY);}
-  prune(now){
+  prune(){
     const entries=Object.entries(this.data); if(entries.length<=3500)return;
     entries.sort((a,b)=>(b[1].lastTs||0)-(a[1].lastTs||0)); this.data=Object.fromEntries(entries.slice(0,3000));
   }

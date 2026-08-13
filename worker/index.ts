@@ -27,6 +27,7 @@ interface ExecutionContext {
 
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    (globalThis as typeof globalThis & { __ARB_OASIS_DB?: D1Database }).__ARB_OASIS_DB = env.DB;
     const url = new URL(request.url);
 
     if (url.pathname === "/_vinext/image") {

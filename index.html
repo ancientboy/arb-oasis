@@ -27,13 +27,13 @@
 <div class="table-wrap"><table><thead><tr><th>类别</th><th>标的</th><th>方向</th><th>Long Ask</th><th>Short Bid</th><th>Spread bp</th><th>Funding Δ /h</th><th>当前 Carry APR</th><th>历史 Carry APR</th><th>Funding 持续性</th><th>Net Edge</th><th>BBO 容量</th><th>风险</th><th></th></tr></thead><tbody id="opportunityBody"><tr><td colspan="14" class="empty-cell">正在初始化市场数据…</td></tr></tbody></table></div></section>
 
 <section class="research-grid">
-  <section class="panel"><div class="panel-title-row compact"><div><h2>Funding Carry Leaders</h2><p>按已观察 Funding 差小时均值年化排序；同时显示 P90 与正向持续率。</p></div></div><div id="fundingLeaders" class="research-list"><div class="empty-state">Funding 历史正在积累</div></div></section>
+  <section class="panel"><div class="panel-title-row compact"><div><h2>Funding Carry Leaders · 7D</h2><p>优先使用跨设备持久化 Funding 历史；服务不可用时自动回退本机统计。显示均值、P90、正向持续率与样本数。</p></div></div><div id="fundingLeaders" class="research-list"><div class="empty-state">Funding 历史正在积累</div></div></section>
   <section class="panel"><div class="panel-title-row compact"><div><h2>Persistent Edge</h2><p>统计某方向进入 Top Opportunity 的出现率、平均 Edge 与最大 Edge。</p></div></div><div id="persistentRoutes" class="research-list"><div class="empty-state">Edge 历史正在积累</div></div></section>
 </section>
 
 <section class="two-col"><section class="panel"><div class="panel-title-row compact"><div><h2>Paper Trading</h2><p>浏览器本地模拟，不连接账户、不发送真实订单。</p></div><button id="clearPaperBtn" class="ghost-btn danger-text">清空持仓</button></div><div id="paperSummary" class="paper-summary"></div><div id="paperPositions" class="paper-list"><div class="empty-state">还没有模拟仓位</div></div></section><section class="panel"><div class="panel-title-row compact"><div><h2>系统状态</h2><p>WebSocket 为主，REST 周期性校准；异常优先阻止开仓。</p></div><button id="clearResearchBtn" class="ghost-btn">清空研究统计</button></div><div id="systemEvents" class="event-list"></div></section></section>
 </main>
-<footer><span>ArbOasis v1 · Research / Paper Trading only</span><span>Public market data · No API keys · Local research history</span></footer>
+<footer><span>ArbOasis v1 · Research / Paper Trading only</span><span>Public market data · No API keys · Persistent 7D Carry history</span></footer>
 </div>
 <script type="module" src="./src/app.js"></script>
 </body></html>
