@@ -159,7 +159,8 @@ Priority: highest alongside P1.
 Status: in progress. Current/mean/median/P10/P90, positive ratio, reversal count,
 7d/30d comparison windows, fee-adjusted break-even holding estimates, dedicated
 Carry/TradFi/Reversal/Settlement views and sample coverage are implemented.
-Positive/negative streak analytics and carry-by-session remain incomplete.
+Positive/negative streak analytics and UTC Asia/Europe/US/Overnight carry-by-session
+statistics are now exposed by the historical API and rendered in the Carry Desk.
 
 The goal is to distinguish persistent Carry from temporary headline APY.
 

@@ -1,5 +1,6 @@
 import { ENDPOINTS, TRADFI_HINTS, VENUES } from './config.js';
 import { resolveTradFiAlias } from './aliases.js';
+import { FALLBACK_CONTRACTS } from './fallback-contracts.js';
 
 export const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 
@@ -30,7 +31,7 @@ export async function loadContractUniverse(){
     bitget:bgResult.status==='rejected'?String(bgResult.reason?.message||bgResult.reason):'',
     gate:gtResult.status==='rejected'?String(gtResult.reason?.message||gtResult.reason):''
   };
-  if([bnResult,bgResult,gtResult].filter(x=>x.status==='fulfilled').length<2)throw new Error('少于两家交易所合约源可用 · '+Object.entries(errors).filter(([,v])=>v).map(([k,v])=>k+': '+v).join(' / '));
+  if([bnResult,bgResult,gtResult].filter(x=>x.status==='fulfilled').length<2)return fallbackContractUniverse(errors);
   const meta = { binance:new Map(), bitget:new Map(), gate:new Map() };
   const bnFunding = new Map((bnFundingInfo || []).map(x => [x.symbol, x]));
 
@@ -92,7 +93,24 @@ export async function loadContractUniverse(){
     universe.push({symbol,venues,venueCount:venues.length,assetClass,alias});
     if(venues.length===3) tripleCommon.push(symbol);
   }
-  return { universe, common:tripleCommon, tripleCommon, tradfiCount, meta, venuesBySymbol, errors };
+  return { universe, common:tripleCommon, tripleCommon, tradfiCount, meta, venuesBySymbol, errors, degraded:false };
+}
+
+export function fallbackContractUniverse(errors={}){
+  const meta={binance:new Map(),bitget:new Map(),gate:new Map()};
+  const venuesBySymbol=new Map();
+  const universe=FALLBACK_CONTRACTS.map(item=>{
+    venuesBySymbol.set(item.symbol,item.venues);
+    const base=item.symbol.slice(0,-4);
+    for(const venue of item.venues)meta[venue].set(item.symbol,{
+      symbol:item.symbol,base,quote:'USDT',fundingIntervalHours:8,takerFeeBps:null,
+      multiplier:1,gateSymbol:venue==='gate'?`${base}_USDT`:undefined,
+      isRwa:item.assetClass==='tradfi',fallbackMetadata:true
+    });
+    return {...item,venueCount:item.venues.length,alias:item.assetClass==='tradfi'?resolveTradFiAlias(base):null};
+  });
+  const tripleCommon=universe.filter(item=>item.venueCount===3).map(item=>item.symbol);
+  return {universe,common:tripleCommon,tripleCommon,tradfiCount:universe.filter(item=>item.assetClass==='tradfi').length,meta,venuesBySymbol,errors,degraded:true};
 }
 
 export function inferAssetClass(symbol,meta,venues=VENUES){

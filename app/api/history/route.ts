@@ -43,6 +43,27 @@ function signReversals(values: number[]) {
   return reversals;
 }
 
+function streaks(values: number[]) {
+  let currentSign = 0, currentLength = 0, maxPositive = 0, maxNegative = 0;
+  for (const value of values) {
+    const sign = value > 0 ? 1 : value < 0 ? -1 : 0;
+    if (!sign) continue;
+    if (sign === currentSign) currentLength += 1;
+    else { currentSign = sign; currentLength = 1; }
+    if (sign > 0) maxPositive = Math.max(maxPositive, currentLength);
+    else maxNegative = Math.max(maxNegative, currentLength);
+  }
+  return { currentSign, currentLength, maxPositive, maxNegative };
+}
+
+function sessionName(timestamp: unknown) {
+  const hour = new Date(finite(timestamp)).getUTCHours();
+  if (hour < 8) return "Asia";
+  if (hour < 13) return "Europe";
+  if (hour < 21) return "US";
+  return "Overnight";
+}
+
 async function ensureSchema() {
   const db = getDatabase();
   await db.batch([
@@ -146,12 +167,21 @@ export async function GET(request: Request) {
       const values = rows.map((row) => finite(row.hourly_bps));
       const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
       const last = rows.at(-1)!;
+      const streak = streaks(values);
+      const sessionGroups = new Map<string, number[]>();
+      for (const row of rows) {
+        const name = sessionName(row.observed_at), group = sessionGroups.get(name) ?? [];
+        group.push(finite(row.hourly_bps)); sessionGroups.set(name, group);
+      }
+      const sessions = [...sessionGroups].map(([name, group])=>({name,count:group.length,avgHourlyBps:group.reduce((sum,value)=>sum+value,0)/group.length,positiveRate:group.filter(value=>value>0).length/group.length}));
       return { id, symbol: last.symbol, assetClass: last.asset_class,
         longVenue: last.long_venue, shortVenue: last.short_venue, count: values.length,
         avgHourlyBps: mean, medianHourlyBps: quantile(values, .5),
         p10HourlyBps: quantile(values, .1), p90HourlyBps: quantile(values, .9),
         positiveRate: values.filter((value) => value > 0).length / values.length,
         reversals: signReversals(values), annualizedPct: mean * 24 * 365 / 100,
+        currentStreakSign: streak.currentSign, currentStreakLength: streak.currentLength,
+        maxPositiveStreak: streak.maxPositive, maxNegativeStreak: streak.maxNegative, sessions,
         lastHourlyBps: values.at(-1), lastTs: last.observed_at };
     }).sort((a, b) => b.annualizedPct - a.annualizedPct);
     return Response.json({ metric, window: requestedWindow, since, routes, generatedAt: Date.now() });

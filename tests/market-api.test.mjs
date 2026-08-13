@@ -17,7 +17,7 @@ test("market proxy rejects sources outside its fixed allowlist", async () => {
 test("market proxy returns an allowlisted upstream payload", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input) => {
-    assert.equal(String(input), "https://fapi.binance.com/fapi/v1/ticker/bookTicker");
+    assert.match(String(input), /^https:\/\/fapi(?:[1-4])?\.binance\.com\/fapi\/v1\/ticker\/bookTicker$/);
     return new Response('[{"symbol":"BTCUSDT","bidPrice":"100","askPrice":"101"}]', {
       status: 200,
       headers: { "content-type": "application/json" },

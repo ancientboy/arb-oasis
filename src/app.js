@@ -1,5 +1,5 @@
 import { DEFAULTS, LABELS, VENUES } from './config.js';
-import { loadContractUniverse, pollMarket } from './exchanges.js';
+import { fallbackContractUniverse, loadContractUniverse, pollMarket } from './exchanges.js';
 import { buildOpportunities, exitPnl } from './engine.js';
 import { RealtimeFeeds } from './streams.js';
 import { ResearchHistory, FundingStats, saveClosedTrade, paperSummary, clearClosedTrades } from './history.js';
@@ -9,7 +9,7 @@ const els={
   universeCount:$('#universeCount'),tripleCount:$('#tripleCount'),tradfiCount:$('#tradfiCount'),bestEdge:$('#bestEdge'),bestEdgeSymbol:$('#bestEdgeSymbol'),eligibleCount:$('#eligibleCount'),venueHealth:$('#venueHealth'),connectionPill:$('#connectionPill'),universeNote:$('#universeNote'),
   body:$('#opportunityBody'),lastUpdate:$('#lastUpdate'),visibleCount:$('#visibleCount'),search:$('#searchInput'),minEdge:$('#minEdgeInput'),minCapacity:$('#minCapacityInput'),riskBuffer:$('#riskBufferInput'),maxMarkDev:$('#maxMarkDevInput'),fundingHorizon:$('#fundingHorizonInput'),
   bnFee:$('#binanceFeeInput'),bgFee:$('#bitgetFeeInput'),gtFee:$('#gateFeeInput'),scope:$('#scopeSegment'),refresh:$('#refreshMarketsBtn'),paperNotional:$('#paperNotional'),paperPositions:$('#paperPositions'),clearPaper:$('#clearPaperBtn'),events:$('#systemEvents'),
-  fundingLeaders:$('#fundingLeaders'),persistentRoutes:$('#persistentRoutes'),paperSummary:$('#paperSummary'),clearResearch:$('#clearResearchBtn'),historyWindow:$('#historyWindow'),reversalRisk:$('#reversalRisk'),tradfiCarry:$('#tradfiCarry'),settlementCalendar:$('#settlementCalendar'),researchCoverage:$('#researchCoverage')
+  fundingLeaders:$('#fundingLeaders'),persistentRoutes:$('#persistentRoutes'),paperSummary:$('#paperSummary'),clearResearch:$('#clearResearchBtn'),historyWindow:$('#historyWindow'),reversalRisk:$('#reversalRisk'),tradfiCarry:$('#tradfiCarry'),settlementCalendar:$('#settlementCalendar'),researchCoverage:$('#researchCoverage'),sessionCarry:$('#sessionCarry')
 };
 
 const history=new ResearchHistory({maxSamples:DEFAULTS.historyMaxSamples,topN:DEFAULTS.historyTopN});
@@ -43,14 +43,22 @@ function bind(){
 }
 
 async function refreshUniverse(){
+  if(!state.meta){
+    const seed=fallbackContractUniverse({});state.universe=seed.universe;state.tripleCommon=seed.tripleCommon;state.meta=seed.meta;
+    state.market={binance:new Map(),bitget:new Map(),gate:new Map(),fetchedAt:Date.now(),latencyMs:0,source:'WS',errors:{}};
+    els.universeCount.textContent=seed.universe.length.toLocaleString();els.tripleCount.textContent=seed.tripleCommon.length.toLocaleString();els.tradfiCount.textContent=seed.tradfiCount.toLocaleString();
+    els.universeNote.textContent=`正在动态同步 · 已用 ${seed.universe.length} 个共同合约启动实时流`;
+    pushEvent('已用内置共同合约池启动 WebSocket，正在后台刷新完整交易所清单','warn');startStreams();
+  }
   try{
     els.universeNote.textContent='正在同步三所 USDT 永续合约状态…';
     const u=await loadContractUniverse();state.universe=u.universe;state.tripleCommon=u.tripleCommon;state.meta=u.meta;
+    if(!state.market)state.market={binance:new Map(),bitget:new Map(),gate:new Map(),fetchedAt:Date.now(),latencyMs:0,source:'WS',errors:{}};
     els.universeCount.textContent=u.universe.length.toLocaleString();els.tripleCount.textContent=u.tripleCommon.length.toLocaleString();els.tradfiCount.textContent=u.tradfiCount.toLocaleString();
-    els.universeNote.textContent=`两所以上共同池 ${u.universe.length} · 三所共同 ${u.tripleCommon.length} · TradFi/RWA ${u.tradfiCount}`;
-    pushEvent(`合约池刷新：${u.universe.length} 个标的至少在两所共同交易，其中 ${u.tradfiCount} 个识别为 TradFi/RWA`,'ok');
+    els.universeNote.textContent=u.degraded?`动态清单受限 · 使用 ${u.universe.length} 个内置共同合约启动实时流`:`两所以上共同池 ${u.universe.length} · 三所共同 ${u.tripleCommon.length} · TradFi/RWA ${u.tradfiCount}`;
+    pushEvent(u.degraded?`合约 API 受限，已启用内置共同合约池并启动 WebSocket 实时行情`:`合约池刷新：${u.universe.length} 个标的至少在两所共同交易，其中 ${u.tradfiCount} 个识别为 TradFi/RWA`,u.degraded?'warn':'ok');
     for(const [venue,error] of Object.entries(u.errors||{}))if(error)pushEvent(`${LABELS[venue]} 合约源降级：${error}`,'warn');
-    if(state.market)startStreams();
+    startStreams();
   }catch(err){pushEvent(`合约池读取失败：${err.message}`,'bad');els.universeNote.textContent='合约池读取失败，可稍后刷新';}
 }
 
@@ -149,6 +157,7 @@ function renderResearch(){
   const tradfi=(remote.length?remote:leaders).filter(x=>x.stat&&((serverFunding.get(x.stat.id)?.assetClass)||state.opportunities.find(o=>o.symbol===x.symbol)?.assetClass)==='tradfi').slice(0,10);els.tradfiCarry.innerHTML=tradfi.length?tradfi.map(x=>`<div class="research-row"><div><b>${x.symbol}</b><span>${LABELS[x.longVenue]} L / ${LABELS[x.shortVenue]} S</span></div><div><strong class="${x.stat.annualizedPct>=0?'positive':'negative'}">${pct(x.stat.annualizedPct)}</strong><small>Carry APR · n${x.stat.count}</small></div></div>`).join(''):'<div class="empty-state">当前共同交易池暂无可靠 TradFi Carry 样本</div>';
   const settlements=[];const seen=new Set();for(const x of state.opportunities){for(const side of ['long','short']){const venue=x[side+'Venue'],time=x[side+'NextFundingTime'],rate=x[side+'Funding'];const key=x.symbol+':'+venue;if(time>Date.now()&&!seen.has(key)){seen.add(key);settlements.push({symbol:x.symbol,venue,time,rate});}}}settlements.sort((a,b)=>a.time-b.time);els.settlementCalendar.innerHTML=settlements.length?settlements.slice(0,10).map(x=>`<div class="research-row"><div><b>${x.symbol}</b><span>${LABELS[x.venue]}</span></div><div><strong>${new Date(x.time).toLocaleTimeString()}</strong><small>${new Date(x.time).toLocaleDateString()} · Funding ${pct(x.rate*100,4)}</small></div></div>`).join(''):'<div class="empty-state">当前行情未返回下一结算时间</div>';
   const fundingSamples=[...serverFunding.values()].reduce((sum,x)=>sum+x.count,0);const opportunitySamples=[...serverOpportunities.values()].reduce((sum,x)=>sum+x.count,0);els.researchCoverage.innerHTML=`<div class="research-row"><div><b>${state.serverWindow.toUpperCase()}</b><span>当前服务端窗口</span></div><div><strong>${fundingSamples.toLocaleString()}</strong><small>Funding 样本</small></div></div><div class="research-row"><div><b>${serverOpportunities.size}</b><span>已观察路线</span></div><div><strong>${opportunitySamples.toLocaleString()}</strong><small>机会快照</small></div></div>`;
+  const sessionRows=[...serverFunding.values()].filter(x=>x.count>=2).flatMap(x=>(x.sessions||[]).map(s=>({...s,symbol:x.symbol,longVenue:x.longVenue,shortVenue:x.shortVenue,currentStreakSign:x.currentStreakSign,currentStreakLength:x.currentStreakLength}))).sort((a,b)=>b.avgHourlyBps-a.avgHourlyBps).slice(0,10);els.sessionCarry.innerHTML=sessionRows.length?sessionRows.map(x=>`<div class="research-row"><div><b>${x.symbol}</b><span>${LABELS[x.longVenue]} L / ${LABELS[x.shortVenue]} S · ${x.name}</span></div><div><strong class="${x.avgHourlyBps>=0?'positive':'negative'}">${bp(x.avgHourlyBps)} bp/h</strong><small>正向 ${f(x.positiveRate*100,0)}% · 连续 ${x.currentStreakSign>0?'+':x.currentStreakSign<0?'-':'—'}${x.currentStreakLength||0} · n${x.count}</small></div></div>`).join(''):'<div class="empty-state">至少积累 2 个服务端样本后显示</div>';
   const ps=paperSummary();els.paperSummary.innerHTML=`<div><b>${ps.count}</b><span>已平仓</span></div><div><b class="${ps.pnl>=0?'positive':'negative'}">${ps.pnl>=0?'+':''}$${f(ps.pnl,2)}</b><span>累计净 PnL</span></div><div><b>${f(ps.winRate*100,0)}%</b><span>胜率</span></div><div><b>${f(ps.avgHoldMin,1)}m</b><span>平均持仓</span></div>`;
 }
 
