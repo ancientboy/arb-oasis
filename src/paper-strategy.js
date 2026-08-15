@@ -1,6 +1,6 @@
 export const PAPER_POLICY={maxPositions:3,minNetEdgeBps:3,minScore:62,capacityMultiple:1.5,takeProfitPct:.003,stopLossPct:.006,maxHoldMinutes:360,minHoldMinutes:3,evaluationMs:5000,actionCooldownMs:10000};
 
-export function evaluatePaperStrategy({enabled,opportunities,positions,pnlById,notional,now=Date.now(),policy=PAPER_POLICY}){
+export function evaluatePaperStrategy({enabled,opportunities,positions,pnlById,notional,canOpen=()=>({ready:true}),now=Date.now(),policy=PAPER_POLICY}){
   if(!enabled)return {open:null,closes:[],decisions:[]};
   const decisions=[],closes=[];
   for(const position of positions){
@@ -18,10 +18,11 @@ export function evaluatePaperStrategy({enabled,opportunities,positions,pnlById,n
   const remaining=positions.filter(p=>!closes.some(x=>x.position.id===p.id));
   if(remaining.length>=policy.maxPositions)return {open:null,closes,decisions};
   const symbols=new Set(remaining.map(p=>p.symbol));
-  const candidate=opportunities.find(x=>x.eligible&&!symbols.has(x.symbol)&&x.netEdgeBps>=policy.minNetEdgeBps&&x.score>=policy.minScore&&x.capacity>=notional*policy.capacityMultiple);
+  const candidates=opportunities.filter(x=>x.eligible&&!symbols.has(x.symbol)&&x.netEdgeBps>=policy.minNetEdgeBps&&x.score>=policy.minScore&&x.capacity>=notional*policy.capacityMultiple);
+  const candidate=candidates.find(x=>canOpen(x).ready);
   if(candidate){decisions.push({level:'open',text:`开仓 ${candidate.symbol}：净 Edge ${candidate.netEdgeBps.toFixed(2)} bp，评分 ${candidate.score}`});return {open:candidate,closes,decisions};}
-  const best=opportunities.find(x=>x.eligible&&!symbols.has(x.symbol));
-  if(best){const reason=best.netEdgeBps<policy.minNetEdgeBps?'净 Edge 未达阈值':best.score<policy.minScore?'评分不足':'容量不足';decisions.push({level:'skip',text:`跳过 ${best.symbol}：${reason}`});}
+  const best=candidates[0]||opportunities.find(x=>x.eligible&&!symbols.has(x.symbol));
+  if(best){const capital=canOpen(best);const reason=best.netEdgeBps<policy.minNetEdgeBps?'净 Edge 未达阈值':best.score<policy.minScore?'评分不足':best.capacity<notional*policy.capacityMultiple?'容量不足':capital.reason||'资金不足';decisions.push({level:'skip',text:`跳过 ${best.symbol}：${reason}`});}
   return {open:null,closes,decisions};
 }
 

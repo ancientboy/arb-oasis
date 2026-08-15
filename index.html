@@ -64,6 +64,11 @@
           <div class="section-heading"><div><h2>当前持仓 <span id="openCount">(0)</span></h2><p>实时展示双腿价格、Funding、未实现 PnL 与自动退出条件</p></div><div class="positions-actions"><label>单仓名义本金 <input id="paperNotional" type="number" value="10000" step="1000" min="100" /></label><button id="clearPaperBtn" class="ghost-btn danger-text">全部平仓</button></div></div>
           <div id="paperPositions" class="paper-list"><div class="empty-state">策略尚未建立模拟仓位</div></div>
         </section>
+        <section id="capital" class="surface capital-card">
+          <div class="section-heading"><div><h2>跨所资金分布 <span>(Paper)</span></h2><p>资金预置在各交易所；开仓时双腿分别锁定初始保证金、费用与维持缓冲</p></div><div class="capital-summary"><span>已锁定 <b id="capitalLocked">$0</b></span><span>可用 <b id="capitalFree">$0</b></span><span>资金使用率 <b id="capitalUsage">0%</b></span><span>资金受限机会 <b id="capitalBlocked">0</b></span></div></div>
+          <div id="venueCapital" class="capital-grid"><div class="empty-state">正在初始化 Paper 资金账户…</div></div>
+          <div class="rebalance-row"><div id="rebalancePlan">正在计算资金再平衡建议…</div><button id="rebalanceBtn" class="ghost-btn" disabled><i class="fa-solid fa-arrow-right-arrow-left"></i> 模拟划转</button></div>
+        </section>
         <section class="bottom-grid">
           <section class="surface venue-card"><div class="section-heading"><div><h2>三所市场健康度</h2><p id="universeNote">同步 Binance / Bitget / Gate</p></div><span id="connectionPill" class="status-pill status-warn"><span class="status-dot"></span>Connecting</span></div><div id="venueHealth" class="venue-health"></div><div class="universe-inline"><span><b id="universeCount">—</b> 两所以上共同</span><span><b id="tripleCount">—</b> 三所共同</span><span><b id="tradfiCount">—</b> TradFi/RWA</span></div></section>
           <section id="risk" class="surface risk-card"><div class="section-heading"><div><h2>策略风控</h2><p>所有限制仅用于 Paper 模拟</p></div></div><div class="risk-grid"><div><span>最大持仓</span><b>3</b></div><div><span>当前持仓</span><b id="riskOpenPositions">0</b></div><div><span>最低 Edge</span><b>3.00 bp</b></div><div><span>单仓止损</span><b>0.60%</b></div></div><div class="risk-bar"><div><span>风险使用率</span><b id="riskUsageText">0%</b></div><progress id="riskUsage" max="100" value="0"></progress></div></section>

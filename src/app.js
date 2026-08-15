@@ -5,6 +5,7 @@ import { capacityCurve, loadDepth } from './depth.js';
 import { RealtimeFeeds } from './streams.js';
 import { ResearchHistory, FundingStats, saveClosedTrade, paperSummary, clearClosedTrades, loadClosedTrades } from './history.js';
 import { PAPER_POLICY, evaluatePaperStrategy, performanceSnapshot } from './paper-strategy.js';
+import { DEFAULT_ALLOCATION, applyRebalance, canOpenRoute, capitalSnapshot, normalizeAllocations, recommendRebalance } from './capital-account.js';
 
 const $=(s)=>document.querySelector(s);
 const els={
@@ -12,7 +13,7 @@ const els={
   body:$('#opportunityBody'),lastUpdate:$('#lastUpdate'),visibleCount:$('#visibleCount'),search:$('#searchInput'),minEdge:$('#minEdgeInput'),minCapacity:$('#minCapacityInput'),riskBuffer:$('#riskBufferInput'),maxMarkDev:$('#maxMarkDevInput'),fundingHorizon:$('#fundingHorizonInput'),
   bnFee:$('#binanceFeeInput'),bgFee:$('#bitgetFeeInput'),gtFee:$('#gateFeeInput'),scope:$('#scopeSegment'),refresh:$('#refreshMarketsBtn'),paperNotional:$('#paperNotional'),paperPositions:$('#paperPositions'),clearPaper:$('#clearPaperBtn'),events:$('#systemEvents'),
   fundingLeaders:$('#fundingLeaders'),persistentRoutes:$('#persistentRoutes'),paperSummary:$('#paperSummary'),clearResearch:$('#clearResearchBtn'),historyWindow:$('#historyWindow'),reversalRisk:$('#reversalRisk'),tradfiCarry:$('#tradfiCarry'),settlementCalendar:$('#settlementCalendar'),researchCoverage:$('#researchCoverage'),sessionCarry:$('#sessionCarry'),venueReliability:$('#venueReliability'),depthCurve:$('#depthCurve'),
-  strategyToggle:$('#strategyToggle'),strategyState:$('#strategyState'),strategyUptime:$('#strategyUptime'),lastDecision:$('#lastDecision'),strategyRiskState:$('#strategyRiskState'),nextSignals:$('#nextSignals'),signalCount:$('#signalCount'),accountEquity:$('#accountEquity'),sidebarEquity:$('#sidebarEquity'),todayPnl:$('#todayPnl'),todayReturn:$('#todayReturn'),totalPnl:$('#totalPnl'),totalReturn:$('#totalReturn'),maxDrawdown:$('#maxDrawdown'),spreadPnl:$('#spreadPnl'),fundingPnl:$('#fundingPnl'),feePnl:$('#feePnl'),equityChart:$('#equityChart'),openCount:$('#openCount'),riskOpenPositions:$('#riskOpenPositions'),riskUsage:$('#riskUsage'),riskUsageText:$('#riskUsageText'),topClock:$('#topClock'),pageTitle:$('#pageTitle'),dashboardView:$('#dashboardView'),researchView:$('#researchView')
+  strategyToggle:$('#strategyToggle'),strategyState:$('#strategyState'),strategyUptime:$('#strategyUptime'),lastDecision:$('#lastDecision'),strategyRiskState:$('#strategyRiskState'),nextSignals:$('#nextSignals'),signalCount:$('#signalCount'),accountEquity:$('#accountEquity'),sidebarEquity:$('#sidebarEquity'),todayPnl:$('#todayPnl'),todayReturn:$('#todayReturn'),totalPnl:$('#totalPnl'),totalReturn:$('#totalReturn'),maxDrawdown:$('#maxDrawdown'),spreadPnl:$('#spreadPnl'),fundingPnl:$('#fundingPnl'),feePnl:$('#feePnl'),equityChart:$('#equityChart'),openCount:$('#openCount'),riskOpenPositions:$('#riskOpenPositions'),riskUsage:$('#riskUsage'),riskUsageText:$('#riskUsageText'),topClock:$('#topClock'),pageTitle:$('#pageTitle'),dashboardView:$('#dashboardView'),researchView:$('#researchView'),venueCapital:$('#venueCapital'),capitalUsage:$('#capitalUsage'),capitalFree:$('#capitalFree'),capitalLocked:$('#capitalLocked'),capitalBlocked:$('#capitalBlocked'),rebalancePlan:$('#rebalancePlan'),rebalanceBtn:$('#rebalanceBtn')
 };
 
 const history=new ResearchHistory({maxSamples:DEFAULTS.historyMaxSamples,topN:DEFAULTS.historyTopN});
@@ -24,7 +25,8 @@ const state={
   universe:[],tripleCommon:[],meta:null,market:null,opportunities:[],scope:'all',busy:false,streams:null,lastRender:0,renderTimer:null,
   venueStatus:Object.fromEntries(VENUES.map(v=>[v,{ok:false,last:0,error:'',mode:'REST'}])),
   paper:JSON.parse(localStorage.getItem('arb-oasis-paper')||'[]'),events:[],lastServerWrite:0,lastMetadataWrite:0,serverWindow:'7d',fundingSchedules:parseStored('arb-oasis-funding-schedules',{}),
-  strategy:parseStored('arb-oasis-auto-paper',{enabled:true,startedAt:Date.now(),lastEvaluation:0,lastAction:0,lastDecision:'等待有效行情',lastSkip:'',lastSkipAt:0}),equitySeries:parseStored('arb-oasis-equity-series',[])
+  strategy:parseStored('arb-oasis-auto-paper',{enabled:true,startedAt:Date.now(),lastEvaluation:0,lastAction:0,lastDecision:'等待有效行情',lastSkip:'',lastSkipAt:0}),equitySeries:parseStored('arb-oasis-equity-series',[]),
+  capital:normalizeCapitalState(parseStored('arb-oasis-paper-capital',{allocations:DEFAULT_ALLOCATION,transfers:[],blocked:[]}))
 };
 
 function settings(){return {...DEFAULTS,minEdgeBps:num(els.minEdge.value),minCapacityUsdt:num(els.minCapacity.value),riskBufferBps:num(els.riskBuffer.value),maxMarkDevBps:num(els.maxMarkDev.value),fundingHorizonHours:Math.max(1,num(els.fundingHorizon.value)||8),feesBps:{binance:num(els.bnFee.value),bitget:num(els.bgFee.value),gate:num(els.gtFee.value)}}}
@@ -34,8 +36,12 @@ function bp(v){return `${v>=0?'+':''}${f(v,2)}`}
 function pct(v,d=1){return Number.isFinite(v)?`${v>=0?'+':''}${f(v,d)}%`:'—'}
 function money(v){if(!Number.isFinite(v))return'—';if(v>=1e9)return`$${f(v/1e9,2)}b`;if(v>=1e6)return`$${f(v/1e6,2)}m`;if(v>=1e3)return`$${f(v/1e3,1)}k`;return`$${f(v,0)}`}
 function price(v){if(!v)return'—';const d=v<1?6:v<100?4:2;return f(v,d)}
+function normalizeCapitalState(value){return {allocations:normalizeAllocations(value?.allocations||DEFAULT_ALLOCATION),transfers:Array.isArray(value?.transfers)?value.transfers.slice(0,12):[],blocked:Array.isArray(value?.blocked)?value.blocked.slice(0,24):[]}}
+function notional(){return Math.max(100,num(els.paperNotional.value)||10000)}
+function capitalCheck(route,amount=notional()){return canOpenRoute({route,notional:amount,allocations:state.capital.allocations,positions:state.paper,feesBps:settings().feesBps})}
+function saveCapital(){localStorage.setItem('arb-oasis-paper-capital',JSON.stringify(state.capital));}
 
-async function init(){bind();renderPaper();renderResearch();renderStrategy();tickClock();await loadServerHistory();await refreshUniverse();await restRefresh();setInterval(restRefresh,DEFAULTS.pollMs);setInterval(refreshUniverse,DEFAULTS.metaRefreshMs);setInterval(()=>{renderHealth();renderStrategy();tickClock();},1000);setInterval(loadServerHistory,300000);}
+async function init(){bind();renderPaper();renderCapital();renderResearch();renderStrategy();tickClock();await loadServerHistory();await refreshUniverse();await restRefresh();setInterval(restRefresh,DEFAULTS.pollMs);setInterval(refreshUniverse,DEFAULTS.metaRefreshMs);setInterval(()=>{renderHealth();renderStrategy();tickClock();},1000);setInterval(loadServerHistory,300000);}
 function bind(){
   [els.search,els.minEdge,els.minCapacity,els.riskBuffer,els.maxMarkDev,els.fundingHorizon,els.bnFee,els.bgFee,els.gtFee].forEach(e=>e?.addEventListener('input',rebuild));
   els.scope?.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;state.scope=b.dataset.scope;[...els.scope.children].forEach(x=>x.classList.toggle('active',x===b));renderTable();});
@@ -46,6 +52,8 @@ function bind(){
   els.clearPaper?.addEventListener('click',()=>{for(const position of [...state.paper])closePaper(position.id,'手动全部平仓');});
   els.clearResearch?.addEventListener('click',()=>{history.clear();fundingStats.clear();clearClosedTrades();renderResearch();pushEvent('本地研究统计已清空','warn');});
   els.strategyToggle?.addEventListener('click',()=>{state.strategy.enabled=!state.strategy.enabled;if(state.strategy.enabled)state.strategy.startedAt=Date.now();saveStrategy();renderStrategy();pushEvent(state.strategy.enabled?'自动 Paper 策略已启动':'自动 Paper 策略已暂停',state.strategy.enabled?'ok':'warn');});
+  els.venueCapital?.addEventListener('change',event=>{const input=event.target.closest('[data-capital-venue]');if(!input)return;const venue=input.dataset.capitalVenue;state.capital.allocations[venue]=Math.max(0,num(input.value));saveCapital();renderCapital();renderPaper();renderSignals();renderStrategy();});
+  els.rebalanceBtn?.addEventListener('click',simulateRebalance);
   document.querySelectorAll('[data-view]').forEach(button=>button.addEventListener('click',()=>switchView(button.dataset.view,button.dataset.focus)));
 }
 
@@ -94,7 +102,7 @@ function rebuild(){
   for(const x of state.opportunities)x.fundingStat=serverFunding.get(x.id)||fundingStats.get(x.id);
   const eligible=state.opportunities.filter(x=>x.eligible);els.eligibleCount.textContent=eligible.length.toLocaleString();
   const best=eligible[0]||state.opportunities[0];if(els.bestEdge)els.bestEdge.textContent=best?`${bp(best.netEdgeBps)} bp`:'—';if(els.bestEdgeSymbol)els.bestEdgeSymbol.textContent=best?`${best.symbol} · Long ${best.longLabel} / Short ${best.shortLabel}`:'等待有效机会';
-  runAutoStrategy();renderHealth();renderTable();renderPaper();renderResearch();renderSignals();renderStrategy();
+  runAutoStrategy();renderHealth();renderTable();renderPaper();renderCapital();renderResearch();renderSignals();renderStrategy();
 }
 
 async function syncServerHistory(opportunities){
@@ -152,17 +160,41 @@ function renderHealth(){
 }
 
 function openPaper(id,auto=false,decisionReason='手动模拟开仓'){
-  const x=state.opportunities.find(o=>o.id===id);if(!x||!x.eligible)return;const notional=Math.max(100,num(els.paperNotional.value)||10000);const s=settings();
-  const entryFees=notional*2*((s.feesBps[x.longVenue]+s.feesBps[x.shortVenue])/10000);
-  const position={id:`p-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,routeId:x.id,openedAt:Date.now(),symbol:x.symbol,assetClass:x.assetClass,longVenue:x.longVenue,shortVenue:x.shortVenue,longAsk:x.longAsk,shortBid:x.shortBid,notional,entryFees,entrySpreadBps:x.spreadBps,entryNetEdgeBps:x.netEdgeBps,entryFundingHourlyBps:x.fundingHourlyBps,entryFundingBps:x.fundingHorizonBps,auto,decisionReason};state.paper.unshift(position);syncPaperEvent('open',position);
-  state.strategy.lastDecision=`开仓 ${x.symbol} · ${decisionReason}`;state.strategy.lastAction=Date.now();saveStrategy();savePaper();renderPaper();pushEvent(`${auto?'自动':'手动'} Paper 开仓 ${x.symbol}: Long ${x.longLabel} / Short ${x.shortLabel}`,'ok');
+  const x=state.opportunities.find(o=>o.id===id);if(!x||!x.eligible)return false;const amount=notional(),check=capitalCheck(x,amount);if(!check.ready){recordCapitalBlock(x,check,auto);return false;}const s=settings();
+  const entryFees=amount*2*((s.feesBps[x.longVenue]+s.feesBps[x.shortVenue])/10000);
+  const position={id:`p-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,routeId:x.id,openedAt:Date.now(),symbol:x.symbol,assetClass:x.assetClass,longVenue:x.longVenue,shortVenue:x.shortVenue,longAsk:x.longAsk,shortBid:x.shortBid,notional:amount,entryFees,entrySpreadBps:x.spreadBps,entryNetEdgeBps:x.netEdgeBps,entryFundingHourlyBps:x.fundingHourlyBps,entryFundingBps:x.fundingHorizonBps,capitalLocks:check.requirements,auto,decisionReason};state.paper.unshift(position);syncPaperEvent('open',position);
+  state.strategy.lastDecision=`开仓 ${x.symbol} · ${decisionReason}`;state.strategy.lastAction=Date.now();saveStrategy();savePaper();renderPaper();renderCapital();renderSignals();pushEvent(`${auto?'自动':'手动'} Paper 开仓 ${x.symbol}: Long ${x.longLabel} / Short ${x.shortLabel}`,'ok');
+  return true;
 }
 function closePaper(id,exitReason='手动平仓',auto=false){
   const p=state.paper.find(x=>x.id===id);if(!p)return;const pnl=state.market?exitPnl(p,state.market,settings().feesBps):null;
-  if(pnl){const closed={...p,...pnl,closedAt:Date.now(),exitReason,autoClose:auto};saveClosedTrade(closed);syncPaperEvent('close',closed);}state.strategy.lastDecision=`平仓 ${p.symbol} · ${exitReason}`;state.strategy.lastAction=Date.now();saveStrategy();pushEvent(`${auto?'自动':'手动'} Paper 平仓 ${p.symbol}：${exitReason}${pnl?` · ${pnl.net>=0?'+':''}$${f(pnl.net,2)}`:''}`,pnl?.net>=0?'ok':'warn');state.paper=state.paper.filter(x=>x.id!==id);savePaper();renderPaper();renderResearch();
+  if(pnl){const closed={...p,...pnl,closedAt:Date.now(),exitReason,autoClose:auto};saveClosedTrade(closed);syncPaperEvent('close',closed);}state.strategy.lastDecision=`平仓 ${p.symbol} · ${exitReason}`;state.strategy.lastAction=Date.now();saveStrategy();pushEvent(`${auto?'自动':'手动'} Paper 平仓 ${p.symbol}：${exitReason}${pnl?` · ${pnl.net>=0?'+':''}$${f(pnl.net,2)}`:''}`,pnl?.net>=0?'ok':'warn');state.paper=state.paper.filter(x=>x.id!==id);savePaper();renderPaper();renderCapital();renderResearch();renderSignals();
 }
-async function syncPaperEvent(event,p){try{await fetch('/api/history',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({paperEvents:[{tradeId:p.id,event,symbol:p.symbol,longVenue:p.longVenue,shortVenue:p.shortVenue,notional:p.notional,netPnl:p.net,details:{routeId:p.routeId,auto:p.auto,decisionReason:p.decisionReason,exitReason:p.exitReason,entrySpreadBps:p.entrySpreadBps,entryNetEdgeBps:p.entryNetEdgeBps,entryFundingHourlyBps:p.entryFundingHourlyBps,longAsk:p.longAsk,shortBid:p.shortBid,longExit:p.longExit,shortExit:p.shortExit,gross:p.gross,carryEstimate:p.carryEstimate,entryFees:p.entryFees,exitFees:p.exitFees},observedAt:event==='close'?p.closedAt:p.openedAt}]})});}catch{}}
+async function syncPaperEvent(event,p){try{await fetch('/api/history',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({paperEvents:[{tradeId:p.id,event,symbol:p.symbol,longVenue:p.longVenue,shortVenue:p.shortVenue,notional:p.notional,netPnl:p.net,details:{routeId:p.routeId,auto:p.auto,decisionReason:p.decisionReason,exitReason:p.exitReason,entrySpreadBps:p.entrySpreadBps,entryNetEdgeBps:p.entryNetEdgeBps,entryFundingHourlyBps:p.entryFundingHourlyBps,longAsk:p.longAsk,shortBid:p.shortBid,longExit:p.longExit,shortExit:p.shortExit,gross:p.gross,carryEstimate:p.carryEstimate,entryFees:p.entryFees,exitFees:p.exitFees,capitalLocks:p.capitalLocks},observedAt:event==='close'?p.closedAt:p.openedAt}]})});}catch{}}
 function savePaper(){localStorage.setItem('arb-oasis-paper',JSON.stringify(state.paper));}
+function recordCapitalBlock(route,check,auto){
+  const previous=state.capital.blocked[0],event={routeId:route.id,symbol:route.symbol,longVenue:route.longVenue,shortVenue:route.shortVenue,reason:check.reason,check,at:Date.now(),auto},fresh=!previous||previous.routeId!==event.routeId||previous.reason!==event.reason||event.at-previous.at>60000;
+  if(!fresh)return;
+  state.capital.blocked.unshift(event);
+  state.capital.blocked=state.capital.blocked.slice(0,24);state.strategy.lastDecision=`跳过 ${route.symbol}：${check.reason}`;saveCapital();saveStrategy();renderCapital();renderSignals();pushEvent(`${auto?'自动':'手动'} Paper 未开仓 ${route.symbol}：${check.reason}`,'warn');
+}
+function capitalQualifiedRoutes(){return state.opportunities.filter(route=>route.eligible&&route.netEdgeBps>=PAPER_POLICY.minNetEdgeBps&&route.score>=PAPER_POLICY.minScore&&route.capacity>=notional()*PAPER_POLICY.capacityMultiple);}
+function renderCapital(){
+  const snapshot=capitalSnapshot({allocations:state.capital.allocations,positions:state.paper});
+  if(els.venueCapital)els.venueCapital.innerHTML=VENUES.map(venue=>{const row=snapshot.venues[venue],allocation=state.capital.allocations[venue],pctUsed=Math.max(0,Math.min(100,row.usage*100));return`<div class="capital-venue"><div class="capital-venue-head"><b>${LABELS[venue]}</b><span class="${row.free>=0?'positive':'negative'}">${row.free>=0?'可用':'超额占用'}</span></div><label>预置资金 <input type="number" min="0" step="500" value="${allocation}" data-capital-venue="${venue}" aria-label="${LABELS[venue]} 预置 Paper 资金" /></label><div class="capital-stat"><span>已锁定</span><b>${money(row.locked)}</b></div><div class="capital-stat"><span>可用保证金</span><b class="${row.free>=0?'positive':'negative'}">${money(row.free)}</b></div><div class="capital-meter"><i style="width:${pctUsed}%"></i></div><small>保证金 + 双向费用 + 维持缓冲</small></div>`;}).join('');
+  if(els.capitalUsage)els.capitalUsage.textContent=`${f(snapshot.usage*100,1)}%`;
+  if(els.capitalFree)els.capitalFree.textContent=money(snapshot.free);
+  if(els.capitalLocked)els.capitalLocked.textContent=money(snapshot.locked);
+  const blocked=state.capital.blocked.filter(x=>Date.now()-x.at<24*3600000);if(els.capitalBlocked)els.capitalBlocked.textContent=String(blocked.length);
+  const best=capitalQualifiedRoutes().map(route=>({route,check:capitalCheck(route)})).find(x=>!x.check.ready);
+  const transfer=best?recommendRebalance({check:best.check,allocations:state.capital.allocations,positions:state.paper}):null;
+  if(els.rebalancePlan)els.rebalancePlan.innerHTML=transfer?`<span><b>建议模拟划转：</b>${LABELS[transfer.from]} → ${LABELS[transfer.to]} ${money(transfer.amount)}，${transfer.reason}</span>`:`<span>当前没有因资金不足而被拦截的合格信号。</span>`;
+  if(els.rebalanceBtn){els.rebalanceBtn.disabled=!transfer;els.rebalanceBtn.dataset.transfer=transfer?JSON.stringify(transfer):'';}
+}
+function simulateRebalance(){
+  const raw=els.rebalanceBtn?.dataset.transfer;if(!raw)return;let transfer;try{transfer=JSON.parse(raw)}catch{return;}
+  state.capital.allocations=applyRebalance(state.capital.allocations,transfer);state.capital.transfers.unshift(transfer);state.capital.transfers=state.capital.transfers.slice(0,12);saveCapital();pushEvent(`模拟再平衡：${LABELS[transfer.from]} → ${LABELS[transfer.to]} ${money(transfer.amount)}，不发送真实转账`,'ok');renderCapital();renderPaper();renderSignals();renderStrategy();
+}
 function renderPaper(){
   if(!state.paper.length)els.paperPositions.innerHTML='<div class="empty-state">策略尚未建立模拟仓位</div>';
   else els.paperPositions.innerHTML=state.paper.map(p=>{const pnl=state.market?exitPnl(p,state.market,settings().feesBps):null,route=state.opportunities.find(x=>x.id===p.routeId||x.id===`${p.symbol}:${p.longVenue}:${p.shortVenue}`),held=(Date.now()-p.openedAt)/60000;return`<div class="paper-item"><div><div class="paper-route"><span class="asset-pill ${p.assetClass||'crypto'}">${p.assetClass==='tradfi'?'TradFi':'Crypto'}</span> ${p.symbol}</div><div class="paper-meta"><span class="long">Long ${LABELS[p.longVenue]}</span> / <span class="short">Short ${LABELS[p.shortVenue]}</span> · ${p.auto?'自动':'手动'}</div></div><div class="paper-data"><span>名义本金</span><b>${money(p.notional)}</b></div><div class="paper-data"><span>Entry / 当前 Spread</span><b>${bp(p.entrySpreadBps)} / ${route?bp(route.spreadBps):'—'} bp</b></div><div class="paper-data"><span>Funding 累计</span><b class="${pnl?.carryEstimate>=0?'positive':'negative'}">${pnl?`${pnl.carryEstimate>=0?'+':''}$${f(pnl.carryEstimate,2)}`:'—'}</b></div><div class="paper-data"><span>未实现 PnL</span><b class="paper-pnl ${pnl?.net>=0?'positive':'negative'}">${pnl?`${pnl.net>=0?'+':''}$${f(pnl.net,2)}`:'—'}</b></div><div class="paper-data"><span>持仓时间</span><b>${held<60?f(held,0)+'m':f(held/60,1)+'h'}</b></div><div class="paper-actions"><button class="small-btn" data-close="${p.id}">平仓</button></div></div>`}).join('');
@@ -174,24 +206,24 @@ function runAutoStrategy(){
   const healthy=VENUES.filter(v=>state.venueStatus[v].ok&&now-state.venueStatus[v].last<DEFAULTS.staleMs*2).length;
   if(healthy<2){state.strategy.lastDecision='等待至少两所行情恢复';saveStrategy();return;}
   const pnlById=new Map(state.paper.map(p=>[p.id,exitPnl(p,state.market,settings().feesBps)]));
-  const notional=Math.max(100,num(els.paperNotional.value)||10000),decision=evaluatePaperStrategy({enabled:true,opportunities:state.opportunities,positions:state.paper,pnlById,notional,now});
+  const amount=notional(),decision=evaluatePaperStrategy({enabled:true,opportunities:state.opportunities,positions:state.paper,pnlById,notional:amount,canOpen:route=>capitalCheck(route,amount),now});
   for(const item of decision.closes)closePaper(item.position.id,item.reason,true);
   if(decision.open&&now-state.strategy.lastAction>=PAPER_POLICY.actionCooldownMs)openPaper(decision.open.id,true,`Edge ${bp(decision.open.netEdgeBps)} bp · Score ${decision.open.score}`);
-  else{const skip=decision.decisions.find(x=>x.level==='skip');if(skip&&(!state.strategy.lastSkipAt||now-state.strategy.lastSkipAt>60000||skip.text!==state.strategy.lastSkip)){state.strategy.lastSkip=skip.text;state.strategy.lastSkipAt=now;state.strategy.lastDecision=skip.text;pushEvent(skip.text,'info');saveStrategy();}}
+  else{const blocked=capitalQualifiedRoutes().map(route=>({route,check:capitalCheck(route,amount)})).find(x=>!x.check.ready);if(blocked)recordCapitalBlock(blocked.route,blocked.check,true);const skip=decision.decisions.find(x=>x.level==='skip');if(skip&&(!state.strategy.lastSkipAt||now-state.strategy.lastSkipAt>60000||skip.text!==state.strategy.lastSkip)){state.strategy.lastSkip=skip.text;state.strategy.lastSkipAt=now;state.strategy.lastDecision=skip.text;pushEvent(skip.text,'info');saveStrategy();}}
 }
 
 function renderSignals(){
-  const opened=new Set(state.paper.map(p=>p.symbol)),notional=Math.max(100,num(els.paperNotional.value)||10000),rows=state.opportunities.slice(0,6).map(x=>{let reason='',ready=x.eligible&&!opened.has(x.symbol)&&x.netEdgeBps>=PAPER_POLICY.minNetEdgeBps&&x.score>=PAPER_POLICY.minScore&&x.capacity>=notional*PAPER_POLICY.capacityMultiple;if(opened.has(x.symbol))reason='已有同标的持仓';else if(!x.eligible)reason=x.reasons[0]||'风险过滤';else if(x.netEdgeBps<PAPER_POLICY.minNetEdgeBps)reason='净 Edge 未达 3 bp';else if(x.score<PAPER_POLICY.minScore)reason='综合评分不足';else if(x.capacity<notional*PAPER_POLICY.capacityMultiple)reason='容量不足';return {x,ready,reason};}).sort((a,b)=>Number(b.ready)-Number(a.ready)||b.x.netEdgeBps-a.x.netEdgeBps).slice(0,3);
+  const opened=new Set(state.paper.map(p=>p.symbol)),amount=notional(),rows=state.opportunities.slice(0,12).map(x=>{const capital=capitalCheck(x,amount);let reason='',ready=x.eligible&&!opened.has(x.symbol)&&x.netEdgeBps>=PAPER_POLICY.minNetEdgeBps&&x.score>=PAPER_POLICY.minScore&&x.capacity>=amount*PAPER_POLICY.capacityMultiple&&capital.ready;if(opened.has(x.symbol))reason='已有同标的持仓';else if(!x.eligible)reason=x.reasons[0]||'风险过滤';else if(x.netEdgeBps<PAPER_POLICY.minNetEdgeBps)reason='净 Edge 未达 3 bp';else if(x.score<PAPER_POLICY.minScore)reason='综合评分不足';else if(x.capacity<amount*PAPER_POLICY.capacityMultiple)reason='容量不足';else if(!capital.ready)reason=capital.reason;return {x,ready,reason,capital};}).sort((a,b)=>Number(b.ready)-Number(a.ready)||b.x.netEdgeBps-a.x.netEdgeBps).slice(0,3);
   els.signalCount.textContent=rows.filter(x=>x.ready).length;els.nextSignals.innerHTML=rows.length?rows.map(({x,ready,reason},index)=>`<div class="signal-item"><div class="signal-head"><span class="signal-tag ${ready?'ready':'blocked'}">${ready?'可执行':'受限'}</span><small>#${index+1}</small></div><div class="signal-route"><b>${x.symbol}</b><span><span class="long">多 ${x.longLabel}</span> / <span class="short">空 ${x.shortLabel}</span></span></div><div class="signal-stats"><span>净 Edge <b class="${x.netEdgeBps>=0?'positive':'negative'}">${bp(x.netEdgeBps)} bp</b></span><span>容量 <b>${money(x.capacity)}</b></span></div><div class="signal-foot"><span>Score ${x.score} · Funding ${bp(x.fundingHourlyBps)} bp/h</span><b class="${ready?'positive':'status-warn'}">${ready?(state.strategy.enabled?'自动排队':'策略已暂停'):escapeHtml(reason)}</b></div></div>`).join(''):'<div class="empty-state">正在等待行情和策略判断</div>';
 }
 
 function renderPerformance(){
-  const closed=loadClosedTrades(),openPnls=state.paper.map(p=>state.market?exitPnl(p,state.market,settings().feesBps):null).filter(Boolean),perf=performanceSnapshot({closedTrades:closed,openPnls});
+  const capital=capitalSnapshot({allocations:state.capital.allocations,positions:state.paper}),closed=loadClosedTrades(),openPnls=state.paper.map(p=>state.market?exitPnl(p,state.market,settings().feesBps):null).filter(Boolean),perf=performanceSnapshot({closedTrades:closed,openPnls,initialEquity:capital.total});
   const color=(value)=>value>=0?'positive':'negative',currency=(value)=>`${value>=0?'+':''}$${f(value,2)}`;
   els.accountEquity.textContent=`$${f(perf.equity,2)}`;els.sidebarEquity.textContent=`$${f(perf.equity,2)}`;els.todayPnl.textContent=currency(perf.todayPnl);els.todayPnl.className=color(perf.todayPnl);els.todayReturn.textContent=pct(perf.todayPnl/perf.initialEquity*100,2);els.todayReturn.className=color(perf.todayPnl);els.totalPnl.textContent=currency(perf.totalPnl);els.totalPnl.className=color(perf.totalPnl);els.totalReturn.textContent=pct(perf.totalPnl/perf.initialEquity*100,2);els.totalReturn.className=color(perf.totalPnl);els.maxDrawdown.textContent=`-${f(perf.maxDrawdown,2)}%`;els.maxDrawdown.className=perf.maxDrawdown?'negative':'';els.spreadPnl.textContent=currency(perf.gross);els.spreadPnl.className=color(perf.gross);els.fundingPnl.textContent=currency(perf.funding);els.fundingPnl.className=color(perf.funding);els.feePnl.textContent=`-$${f(perf.fees,2)}`;els.feePnl.className='negative';
   const ps=paperSummary();els.paperSummary.innerHTML=`<div><b>${f(ps.winRate*100,0)}%</b><span>胜率</span></div><div><b>${ps.count}</b><span>已平仓</span></div><div><b>${state.paper.length}</b><span>当前持仓</span></div><div><b>${ps.avgHoldMin<60?f(ps.avgHoldMin,0)+'m':f(ps.avgHoldMin/60,1)+'h'}</b><span>平均持仓</span></div>`;
   const now=Date.now(),last=state.equitySeries.at(-1);if(!last||now-last.t>15000){state.equitySeries.push({t:now,value:perf.equity});state.equitySeries=state.equitySeries.slice(-480);localStorage.setItem('arb-oasis-equity-series',JSON.stringify(state.equitySeries));}drawEquityChart(state.equitySeries,perf.initialEquity);
-  els.openCount.textContent=`(${state.paper.length})`;els.riskOpenPositions.textContent=state.paper.length;const usage=Math.min(100,state.paper.length/PAPER_POLICY.maxPositions*100);els.riskUsage.value=usage;els.riskUsageText.textContent=`${f(usage,0)}%`;
+  els.openCount.textContent=`(${state.paper.length})`;els.riskOpenPositions.textContent=state.paper.length;const usage=Math.min(100,capital.usage*100);els.riskUsage.value=usage;els.riskUsageText.textContent=`${f(usage,0)}%`;
 }
 
 function drawEquityChart(series,initial){

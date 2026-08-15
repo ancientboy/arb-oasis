@@ -45,6 +45,7 @@ Current important modules:
 - `src/streams.js` — public WebSocket market feeds
 - `src/engine.js` — cross-venue opportunity calculations
 - `src/history.js` — local research history and funding statistics
+- `src/capital-account.js` — per-venue Paper capital, dual-leg margin locks and rebalancing simulation
 - `src/app.js` — application state and UI wiring
 - `index.html` / `styles.css` — browser dashboard
 - `services/market-data` — always-on public-market collector and last-known-good cache
@@ -197,6 +198,15 @@ The backend should eventually persist at least:
 - funding during holding period
 - research PnL
 - reason for exit
+
+### Paper capital ledger
+
+Browser-session Paper trading tracks a separate pre-positioned USDT balance for
+each venue. A cross-venue position locks a requirement on both venues: initial
+margin, two-way fee reserve and maintenance buffer. This is deliberately a
+simulation; it never reads balances or sends transfers to an exchange. Future
+server-side execution must replace the local ledger with authenticated account
+snapshots, transfer state and reconciliation.
 
 ## 7. TradFi Fair Value Layer
 

@@ -15,6 +15,11 @@ test('auto paper strategy closes at its simulated stop loss',()=>{
   assert.match(result.closes[0].reason,/止损/);
 });
 
+test('auto paper strategy skips a qualified signal when venue capital is unavailable',()=>{
+  const result=evaluatePaperStrategy({enabled:true,opportunities:[opportunity],positions:[],pnlById:new Map(),notional:10000,canOpen:()=>({ready:false,reason:'bitget 可用保证金不足'}),now:100000});
+  assert.equal(result.open,null);assert.match(result.decisions[0].text,/可用保证金不足/);
+});
+
 test('performance snapshot separates gross funding and fees',()=>{
   const result=performanceSnapshot({closedTrades:[{net:90,gross:100,carryEstimate:10,entryFees:8,exitFees:12,closedAt:Date.now()}],openPnls:[{net:5}]});
   assert.equal(result.equity,100095);assert.equal(result.gross,100);assert.equal(result.funding,10);assert.equal(result.fees,20);

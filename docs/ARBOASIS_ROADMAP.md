@@ -31,6 +31,18 @@ Status: implemented for browser-session Paper trading.
 Always-on execution after the browser closes still requires deployment of an independent
 server-side strategy runner. Real exchange execution remains out of scope.
 
+## P0.6 — Capital-Aware Paper Operations
+
+Status: implemented for browser-session Paper trading.
+
+- Paper funds are pre-positioned independently on Binance, Bitget and Gate
+- every long/short leg locks its own initial margin, two-way fee reserve and maintenance buffer
+- both manual and automatic entries are blocked when either venue lacks free margin
+- the command center shows venue allocation, locked/free capital, utilization and capital-blocked opportunities
+- a local-only simulated rebalancing action may move Paper funds between venues; it never sends a real transfer
+
+Authenticated balances, withdrawal state, actual transfer fees and reconciliation remain part of a future server-side execution service.
+
 ---
 
 # P0 — Research Scanner Foundation

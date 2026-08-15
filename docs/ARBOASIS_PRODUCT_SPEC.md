@@ -38,6 +38,8 @@ Current v1 research scope:
 - Funding persistence statistics
 - Automatic and manual Paper trading only
 - Strategy status, open positions, equity, drawdown and PnL attribution dashboard
+- Per-venue Paper capital accounts with pre-positioned funds, dual-leg margin locks,
+  fee/maintenance buffers, capital-blocked signals and simulated rebalancing
 
 The browser build must never store live trading credentials or send real orders.
 The current automatic Paper strategy runs only while the dashboard is open; a future
@@ -94,6 +96,7 @@ Risk dimensions:
 - mark-price divergence
 - liquidation asymmetry
 - insufficient free margin
+- capital fragmentation between venues
 - API / WebSocket outages
 - venue counterparty risk
 - withdrawal / transfer interruptions
