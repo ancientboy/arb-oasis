@@ -71,3 +71,24 @@ test("market proxy prefers the configured collector service", async () => {
     delete globalThis.__ARB_OASIS_MARKET_SERVICE_TOKEN;
   }
 });
+
+test("market proxy turns a cold upstream failure into a retryable response instead of a route crash", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    throw new Error("upstream blocked");
+  };
+  try {
+    const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+    workerUrl.searchParams.set("market-unavailable-test", String(process.pid) + "-" + Date.now());
+    const { default: worker } = await import(workerUrl.href);
+    const response = await worker.fetch(
+      new Request("http://localhost/api/market?source=gate-tickers"),
+      { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) }, DB: undefined },
+      { waitUntil() {}, passThroughOnException() {} },
+    );
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error, "gate-tickers temporarily unavailable");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

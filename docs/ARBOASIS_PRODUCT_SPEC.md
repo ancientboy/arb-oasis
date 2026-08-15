@@ -40,10 +40,26 @@ Current v1 research scope:
 - Strategy status, open positions, equity, drawdown and PnL attribution dashboard
 - Per-venue Paper capital accounts with pre-positioned funds, dual-leg margin locks,
   fee/maintenance buffers, capital-blocked signals and simulated rebalancing
+- Explainable opportunity cards: executable routes are separated from market watch
+  routes, and each route shows direction, spread, Funding contribution, cost,
+  capacity and per-venue Paper capital required
 
 The browser build must never store live trading credentials or send real orders.
 The current automatic Paper strategy runs only while the dashboard is open; a future
 always-on runner belongs in the independent server-side strategy service.
+
+### 2.1 What the current Paper strategy does — and does not do
+
+The scanner evaluates both directions for every shared venue pair. It may find a
+positive Funding component with a negative entry spread, or the reverse. A route is
+eligible for automatic Paper entry only when the **combined net Edge** is positive
+after executable bid/ask, the configured funding horizon, round-trip fees and the
+risk buffer, and it also passes capacity, data-quality, score and per-venue capital
+checks.
+
+The current performance card represents positions opened in the active browser
+session. It is not a historical backtest and it is not a claim that every scanned
+route was traded. The Backtest Lab is a separate future product milestone.
 
 ## 3. User Jobs
 

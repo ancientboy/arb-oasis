@@ -9,7 +9,7 @@ const UPSTREAMS: Record<string, { urls: string[]; ttlMs: number }> = {
   "gate-tickers": { urls: ["https://api.gateio.ws/api/v4/futures/usdt/tickers"], ttlMs: 2_000 },
 };
 
-type CacheEntry = { expiresAt: number; body: string; contentType: string; fetchedAt: number };
+type CacheEntry = { expiresAt: number; staleUntil: number; body: string; contentType: string; fetchedAt: number };
 const responseCache = new Map<string, CacheEntry>();
 
 export async function GET(request: Request) {
@@ -20,36 +20,36 @@ export async function GET(request: Request) {
   if (!upstream) return Response.json({ error: "unsupported market source" }, { status: 400 });
   const cached = responseCache.get(source);
   if (cached && cached.expiresAt > Date.now()) return marketResponse(cached, source, "HIT");
+  const runtime = globalThis as typeof globalThis & {
+    __ARB_OASIS_MARKET_SERVICE_URL?: string;
+    __ARB_OASIS_MARKET_SERVICE_TOKEN?: string;
+  };
+  const serviceBase = runtime.__ARB_OASIS_MARKET_SERVICE_URL?.replace(/\/$/, "");
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 12_000);
+  const timer = setTimeout(() => controller.abort(), 10_000);
   try {
-    const runtime = globalThis as typeof globalThis & {
-      __ARB_OASIS_MARKET_SERVICE_URL?: string;
-      __ARB_OASIS_MARKET_SERVICE_TOKEN?: string;
-    };
-    const serviceBase = runtime.__ARB_OASIS_MARKET_SERVICE_URL?.replace(/\/$/, "");
     const targets = serviceBase ? [`${serviceBase}/v1/source/${encodeURIComponent(source)}`] : upstream.urls;
     const headers = {
         accept: "application/json",
-        "user-agent": "ArbOasis/1.0 market-research",
         ...(serviceBase && runtime.__ARB_OASIS_MARKET_SERVICE_TOKEN
           ? { authorization: `Bearer ${runtime.__ARB_OASIS_MARKET_SERVICE_TOKEN}` }
           : {}),
       };
     const { body, contentType } = await fetchFirstJson(targets, headers, controller.signal);
-    const entry = {
+    const entry: CacheEntry = {
       body,
       contentType,
       fetchedAt: Date.now(),
       expiresAt: Date.now() + upstream.ttlMs,
+      staleUntil: Date.now() + staleWindowMs(upstream.ttlMs),
     };
     responseCache.set(source, entry);
     return marketResponse(entry, source, serviceBase ? "COLLECTOR" : "MISS");
   } catch (error) {
-    if (cached) return marketResponse(cached, source, "STALE");
+    if (cached && cached.staleUntil > Date.now()) return marketResponse(cached, source, "STALE");
     return Response.json(
-      { error: source + " unavailable", detail: error instanceof Error ? error.message : "fetch failed", backend: serviceBase ? "collector" : "edge-direct" },
-      { status: 502 },
+      { error: source + " temporarily unavailable", detail: error instanceof Error ? error.message : "fetch failed", backend: serviceBase ? "collector" : "edge-direct", retryAfterMs: 3_000 },
+      { status: 503 },
     );
   } finally {
     clearTimeout(timer);
@@ -67,8 +67,8 @@ async function depthResponse(source: string, symbol: string) {
   const targets=urls[source];if(!targets)return Response.json({error:"unsupported depth source"},{status:400});
   const cacheKey=`${source}:${symbol}`,cached=responseCache.get(cacheKey);if(cached&&cached.expiresAt>Date.now())return marketResponse(cached,cacheKey,"HIT");
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
-  try{const {body,contentType}=await fetchFirstJson(targets,{accept:"application/json","user-agent":"ArbOasis/1.0 depth-research"},controller.signal);const entry={body,contentType,fetchedAt:Date.now(),expiresAt:Date.now()+1500};responseCache.set(cacheKey,entry);return marketResponse(entry,cacheKey,"MISS");}
-  catch(error){if(cached)return marketResponse(cached,cacheKey,"STALE");return Response.json({error:`${source} unavailable`,detail:error instanceof Error?error.message:"fetch failed"},{status:502});}
+  try{const {body,contentType}=await fetchFirstJson(targets,{accept:"application/json"},controller.signal);const entry={body,contentType,fetchedAt:Date.now(),expiresAt:Date.now()+1500,staleUntil:Date.now()+45_000};responseCache.set(cacheKey,entry);return marketResponse(entry,cacheKey,"MISS");}
+  catch(error){if(cached&&cached.staleUntil>Date.now())return marketResponse(cached,cacheKey,"STALE");return Response.json({error:`${source} temporarily unavailable`,detail:error instanceof Error?error.message:"fetch failed",retryAfterMs:3_000},{status:503});}
   finally{clearTimeout(timer);}
 }
 
@@ -77,14 +77,22 @@ function binanceUrls(path: string) {
 }
 
 async function fetchFirstJson(targets: string[], headers: Record<string,string>, signal: AbortSignal) {
-  const attempts=targets.map(async target=>{
-    const response=await fetch(target,{cache:"no-store",signal,headers});
-    const body=await response.text();
-    if(!response.ok)throw new Error(`${new URL(target).host} HTTP ${response.status}`);
-    JSON.parse(body);
-    return {body,contentType:response.headers.get("content-type")??"application/json"};
-  });
-  return Promise.any(attempts);
+  const errors: string[]=[];
+  for(const target of targets){
+    if(signal.aborted)break;
+    try{
+      const response=await fetch(target,{cache:"no-store",signal,headers});
+      const body=await response.text();
+      if(!response.ok)throw new Error(`${new URL(target).host} HTTP ${response.status}`);
+      JSON.parse(body);
+      return {body,contentType:response.headers.get("content-type")??"application/json"};
+    }catch(error){errors.push(error instanceof Error?error.message:"fetch failed");}
+  }
+  throw new Error(errors.join(" | ")||"market upstream unavailable");
+}
+
+function staleWindowMs(ttlMs: number) {
+  return Math.max(ttlMs * 15, 90_000);
 }
 
 function marketResponse(entry: CacheEntry, source: string, cacheState: string) {

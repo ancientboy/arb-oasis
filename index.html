@@ -38,6 +38,15 @@
           <div class="strip-metric wide"><span>策略模式</span><b id="strategyMode">市场中性 · Cross-Venue</b></div>
           <button id="strategyToggle" class="danger-btn"><i class="fa-solid fa-pause"></i><span>暂停策略</span></button>
         </section>
+        <section class="surface strategy-explainer" aria-labelledby="strategyExplainerTitle">
+          <div class="strategy-explainer-head"><div><span class="eyebrow">策略说明 · PAPER ONLY</span><h2 id="strategyExplainerTitle">这不是预测涨跌，而是同时持有同一标的的多空双腿</h2><p>系统扫描每个共同合约的两个方向：在价格更低的交易所做多、在价格更高的交易所做空；只有扣除费用、Funding 与风险缓冲后仍为正的净 Edge 才能进入 Paper。</p></div><span class="neutral-badge"><i class="fa-solid fa-scale-balanced"></i> 市场中性</span></div>
+          <div class="strategy-steps">
+            <div><span>01</span><b>找方向</b><small>同时计算「多 A / 空 B」和反方向，不只看单一正负 bp。</small></div>
+            <div><span>02</span><b>算可执行收益</b><small>净 Edge = 可成交价差 + 持有期 Funding 差 − 双腿往返费用 − 风险缓冲。</small></div>
+            <div><span>03</span><b>分所锁资并模拟执行</b><small>两腿各自在对应交易所锁定保证金；最多 3 仓，满足容量、评分和风控才开仓。</small></div>
+          </div>
+          <div class="strategy-note"><i class="fa-solid fa-circle-info"></i><span><b>怎么看卡片：</b>绿色「可执行」才是策略候选；橙色「市场观察」仅说明接近条件或为何被拦截，绝不自动开仓。当前收益是本浏览器会话的 Paper 结果，不是历史回测收益。</span></div>
+        </section>
         <section class="dashboard-grid">
           <section class="surface performance-card">
             <div class="section-heading"><div><h2>收益概览 <span>(USDT)</span></h2><p>实时模拟净值，已计入双腿费用与 Funding 估算</p></div><div class="period-tabs"><button>1D</button><button class="active">7D</button><button>30D</button></div></div>
@@ -56,9 +65,13 @@
             </div>
           </section>
           <aside class="surface signals-card">
-            <div class="section-heading"><div><h2>下一步信号</h2><p>自动执行或显示被阻止原因</p></div><span id="signalCount" class="count-badge">0</span></div>
-            <div id="nextSignals" class="signal-list"><div class="empty-state">正在等待行情和策略判断</div></div>
+            <div class="section-heading"><div><h2>可执行路线</h2><p>仅列出扣除成本后为正、且通过风控的方向</p></div><span id="signalCount" class="count-badge">0</span></div>
+            <div id="nextSignals" class="signal-list"><div class="empty-state">正在等待足够完整的双所行情</div></div>
           </aside>
+        </section>
+        <section class="surface watchlist-card">
+          <div class="section-heading"><div><h2>市场观察</h2><p>这些路线不执行：展示最接近条件的方向，以及阻止它的唯一主要原因</p></div><span class="watchlist-label">不自动开仓</span></div>
+          <div id="watchSignals" class="watch-signal-grid"><div class="empty-state">正在建立市场观察池</div></div>
         </section>
         <section id="positions" class="surface positions-card">
           <div class="section-heading"><div><h2>当前持仓 <span id="openCount">(0)</span></h2><p>实时展示双腿价格、Funding、未实现 PnL 与自动退出条件</p></div><div class="positions-actions"><label>单仓名义本金 <input id="paperNotional" type="number" value="10000" step="1000" min="100" /></label><button id="clearPaperBtn" class="ghost-btn danger-text">全部平仓</button></div></div>

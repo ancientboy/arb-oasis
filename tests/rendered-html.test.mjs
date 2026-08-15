@@ -38,6 +38,8 @@ test("renders development preview metadata", async () => {
   assert.match(dashboard, /Depth &amp; Capacity Curve|Depth & Capacity Curve/);
   assert.match(dashboard, /跨所资金分布/);
   assert.match(dashboard, /策略指挥中心/);
-  assert.match(dashboard, /下一步信号/);
+  assert.match(dashboard, /可执行路线/);
+  assert.match(dashboard, /市场观察/);
+  assert.match(dashboard, /这不是预测涨跌/);
   assert.match(dashboard, /equityChart/);
 });

@@ -43,6 +43,22 @@ Status: implemented for browser-session Paper trading.
 
 Authenticated balances, withdrawal state, actual transfer fees and reconciliation remain part of a future server-side execution service.
 
+## P0.7 — Explainable Strategy Operations
+
+Status: implemented for browser-session Paper trading.
+
+- explicit in-product explanation of the market-neutral, two-leg strategy
+- both route directions are evaluated, but only positive all-in Net Edge can be executable
+- executable routes are rendered as decision cards with spread, Funding, costs,
+  capacity, per-venue Paper capital locks and a manual Paper action
+- negative or otherwise blocked routes are moved into a separately labelled market-watch
+  panel with one primary reason; they are never presented as a trade instruction
+- market gateway failures use bounded failover, stale last-known-good responses and a
+  non-500 temporary-unavailable response; the browser keeps usable quotes while it waits
+
+This improves decision clarity but does not turn the Paper strategy into a historical
+backtest or a live execution system.
+
 ---
 
 # P0 — Research Scanner Foundation
