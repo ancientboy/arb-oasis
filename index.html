@@ -3,48 +3,94 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="ArbOasis - Binance, Bitget and Gate cross-venue spread, funding carry and TradFi/RWA perpetual arbitrage research scanner" />
-  <title>ArbOasis · Cross-Venue Alpha Research</title>
+  <meta name="description" content="ArbOasis 自动 Paper 跨交易所套利策略指挥中心" />
+  <title>ArbOasis · 策略指挥中心</title>
+  <link rel="stylesheet" href="/assets/fontawesome/css/all.min.css" />
   <link rel="stylesheet" href="./styles.css" />
-<style>.row-actions{display:flex;gap:5px;flex-wrap:wrap}</style></head>
+</head>
 <body>
 <div class="app-shell">
-<header class="topbar"><div class="brand-wrap"><div class="brand-mark">AO</div><div><div class="brand">ArbOasis</div><div class="subtitle">Cross-Venue Spread · Funding Carry · TradFi/RWA</div></div></div><div class="top-actions"><div id="connectionPill" class="status-pill status-warn"><span class="status-dot"></span><span>Connecting</span></div><button id="refreshMarketsBtn" class="ghost-btn">刷新合约池</button></div></header>
-<main>
-<section class="hero-grid five">
-  <article class="hero-card primary-card"><div class="eyebrow">2+ VENUE UNIVERSE</div><div class="hero-value" id="universeCount">—</div><div class="hero-label">至少两所共同 USDT 永续</div><div class="hero-foot" id="universeNote">同步 Binance / Bitget / Gate 合约清单</div></article>
-  <article class="hero-card"><div class="eyebrow">3 VENUE COMMON</div><div class="hero-value" id="tripleCount">—</div><div class="hero-label">三所同时存在的标的</div><div class="hero-foot">Crypto 主池与高流动性基准</div></article>
-  <article class="hero-card tradfi-card"><div class="eyebrow">TRADFI / RWA</div><div class="hero-value" id="tradfiCount">—</div><div class="hero-label">股票 / ETF / RWA 类永续</div><div class="hero-foot">允许任意两所共同，不要求三所齐全</div></article>
-  <article class="hero-card"><div class="eyebrow">BEST NET EDGE</div><div class="hero-value" id="bestEdge">—</div><div class="hero-label">价差 + Funding Horizon - 成本</div><div class="hero-foot" id="bestEdgeSymbol">等待实时盘口</div></article>
-  <article class="hero-card"><div class="eyebrow">EXECUTABLE</div><div class="hero-value" id="eligibleCount">—</div><div class="hero-label">通过风险/容量过滤的方向</div><div class="venue-health" id="venueHealth"></div></article>
-</section>
-
-<section class="panel controls-panel"><div class="panel-title-row"><div><h2>统一机会扫描器</h2><p>同币种跨所价差、Funding Carry 与 TradFi/RWA 放在同一评分框架中。</p></div><div class="segmented" id="scopeSegment"><button data-scope="all" class="active">全部 2+ 所</button><button data-scope="triple">三所共同</button><button data-scope="tradfi">TradFi/RWA</button><button data-scope="crypto">Crypto</button><button data-scope="positive">正净 Edge</button><button data-scope="liquid">高流动性</button></div></div>
-<div class="controls-grid"><label>搜索标的<input id="searchInput" placeholder="BTC / AAPL / NVDA..." /></label><label>最低净 Edge (bp)<input id="minEdgeInput" type="number" step="0.1" value="0" /></label><label>最低 BBO 容量 (USDT)<input id="minCapacityInput" type="number" step="100" value="5000" /></label><label>Funding 评估时长 (h)<input id="fundingHorizonInput" type="number" step="1" value="8" min="1" /></label><label>风险缓冲 (bp)<input id="riskBufferInput" type="number" step="0.1" value="1.5" /></label><label>Binance 费率 / 次 (bp)<input id="binanceFeeInput" type="number" step="0.1" value="5" /></label><label>Bitget fallback / 次 (bp)<input id="bitgetFeeInput" type="number" step="0.1" value="6" /></label><label>Gate fallback / 次 (bp)<input id="gateFeeInput" type="number" step="0.1" value="7.5" /></label><label>Mark/Index 最大偏离 (bp)<input id="maxMarkDevInput" type="number" step="1" value="40" /></label></div>
-<div class="assumption-note">当前净 Edge = 可成交建仓价差 + 按各所结算周期标准化后的 Funding Carry × 评估时长 − 双边开/平仓费 − 风险缓冲。历史 Carry APR 使用已观察 Funding 差的小时均值简单年化，只用于研究，不代表锁定收益。</div></section>
-
-<section class="panel table-panel"><div class="table-toolbar"><div class="toolbar-left"><span id="lastUpdate">尚未更新</span><span class="divider"></span><span id="visibleCount">0 个方向</span></div><div class="toolbar-right"><label class="inline-label">Paper Notional <input id="paperNotional" type="number" value="10000" step="1000" min="100" /></label></div></div>
-<div class="table-wrap"><table><thead><tr><th>类别</th><th>标的</th><th>方向</th><th>Long Ask</th><th>Short Bid</th><th>Spread bp</th><th>Funding Δ /h</th><th>当前 Carry APR</th><th>历史 Carry APR</th><th>Funding 持续性</th><th>Net Edge</th><th>BBO 容量</th><th>风险</th><th></th></tr></thead><tbody id="opportunityBody"><tr><td colspan="14" class="empty-cell">正在初始化市场数据…</td></tr></tbody></table></div></section>
-
-<section class="panel"><div class="panel-title-row compact"><div><h2>Depth & Capacity Curve</h2><p>点击任一方向的 Depth，使用真实多档订单簿计算 $10k–$1m 双腿 VWAP、填充率和费用后净 Edge。</p></div></div><div id="depthCurve" class="research-list"><div class="empty-state">选择一个行情方向查看深度容量</div></div></section>
-
-<section class="research-grid">
-  <section class="panel"><div class="panel-title-row compact"><div><h2>Funding Carry Desk</h2><p>优先使用跨设备持久化 Funding 历史；显示均值、P10/P90、正向持续率、反转次数与样本数。</p></div><div class="segmented" id="historyWindow"><button data-window="24h">24H</button><button data-window="7d" class="active">7D</button><button data-window="30d">30D</button><button data-window="90d">90D</button></div></div><div id="fundingLeaders" class="research-list"><div class="empty-state">Funding 历史正在积累</div></div></section>
-  <section class="panel"><div class="panel-title-row compact"><div><h2>Persistent Edge</h2><p>服务端统计各路线可交易率、平均/最大 Edge、平均容量与样本数。</p></div></div><div id="persistentRoutes" class="research-list"><div class="empty-state">Edge 历史正在积累</div></div></section>
-</section>
-
-<section class="research-grid">
-  <section class="panel"><div class="panel-title-row compact"><div><h2>Reversal Risk</h2><p>反转频率越高，当前 Carry 越不适合作为稳定收益外推。</p></div></div><div id="reversalRisk" class="research-list"><div class="empty-state">等待 Funding 历史</div></div></section>
-  <section class="panel"><div class="panel-title-row compact"><div><h2>TradFi Carry</h2><p>仅显示已明确识别的股票、ETF、商品与 RWA 永续路线。</p></div></div><div id="tradfiCarry" class="research-list"><div class="empty-state">等待 TradFi/RWA 行情</div></div></section>
-  <section class="panel"><div class="panel-title-row compact"><div><h2>Settlement Calendar</h2><p>按下一次 Funding 结算时间排序，时间取各交易所当前公开字段。</p></div></div><div id="settlementCalendar" class="research-list"><div class="empty-state">等待结算时间数据</div></div></section>
-  <section class="panel"><div class="panel-title-row compact"><div><h2>Research Coverage</h2><p>展示当前统计窗口的服务端样本覆盖情况。</p></div></div><div id="researchCoverage" class="research-list"><div class="empty-state">等待历史样本</div></div></section>
-  <section class="panel"><div class="panel-title-row compact"><div><h2>Carry by Session</h2><p>按 UTC 亚洲、欧洲、美国与隔夜时段比较 Funding Carry。</p></div></div><div id="sessionCarry" class="research-list"><div class="empty-state">等待分时段样本</div></div></section>
-  <section class="panel"><div class="panel-title-row compact"><div><h2>Venue Reliability</h2><p>按历史健康样本统计交易所数据源可用率、模式和平均延迟。</p></div></div><div id="venueReliability" class="research-list"><div class="empty-state">等待服务端健康样本</div></div></section>
-</section>
-
-<section class="two-col"><section class="panel"><div class="panel-title-row compact"><div><h2>Paper Trading</h2><p>浏览器本地模拟，不连接账户、不发送真实订单。</p></div><button id="clearPaperBtn" class="ghost-btn danger-text">清空持仓</button></div><div id="paperSummary" class="paper-summary"></div><div id="paperPositions" class="paper-list"><div class="empty-state">还没有模拟仓位</div></div></section><section class="panel"><div class="panel-title-row compact"><div><h2>系统状态</h2><p>WebSocket 为主，REST 周期性校准；异常优先阻止开仓。</p></div><button id="clearResearchBtn" class="ghost-btn">清空研究统计</button></div><div id="systemEvents" class="event-list"></div></section></section>
-</main>
-<footer><span>ArbOasis v1 · Research / Paper Trading only</span><span>Public market data · No API keys · Persistent 7D Carry history</span></footer>
+  <aside class="sidebar">
+    <div class="brand-wrap"><div class="brand-mark">AO</div><div><div class="brand">ArbOasis</div><div class="subtitle">Cross-Venue Strategy</div></div></div>
+    <nav class="side-nav" aria-label="主要导航">
+      <button class="nav-item active" data-view="dashboard"><i class="fa-solid fa-house"></i><span>策略指挥中心</span></button>
+      <button class="nav-item" data-view="research"><i class="fa-solid fa-chart-column"></i><span>研究中心</span></button>
+      <button class="nav-item" data-view="research" data-focus="scanner"><i class="fa-solid fa-arrow-right-arrow-left"></i><span>跨交易所监控</span></button>
+      <button class="nav-item" data-view="dashboard" data-focus="risk"><i class="fa-solid fa-shield-halved"></i><span>资金与风控</span></button>
+      <button class="nav-item" data-view="dashboard" data-focus="positions"><i class="fa-solid fa-clock-rotate-left"></i><span>持仓与记录</span></button>
+      <button class="nav-item" data-view="research" data-focus="settings"><i class="fa-solid fa-sliders"></i><span>策略配置</span></button>
+    </nav>
+    <div class="account-card"><div class="account-title"><span class="account-avatar">AO</span><span>ArbOasis Paper</span></div><small>模拟账户权益</small><strong id="sidebarEquity">$100,000.00</strong><span class="paper-badge">PAPER ONLY</span></div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar">
+      <div><h1 id="pageTitle">策略指挥中心</h1><span>自动化 Paper 交易 · 实时跨所扫描</span></div>
+      <div class="top-actions"><span class="clock"><span class="live-dot"></span><span id="topClock">—</span></span><button id="refreshMarketsBtn" class="ghost-btn"><i class="fa-solid fa-rotate"></i> 刷新</button></div>
+    </header>
+    <main>
+      <section id="dashboardView" class="workspace-page active">
+        <section class="strategy-strip">
+          <div class="strategy-primary"><span class="play-orbit"><i class="fa-solid fa-play"></i></span><div><strong id="strategyState">Paper 策略准备中</strong><small>页面打开时自动模拟，不发送真实订单</small></div></div>
+          <div class="strip-metric"><span>运行时长</span><b id="strategyUptime">0分</b></div>
+          <div class="strip-metric wide"><span>上次决策</span><b id="lastDecision">等待有效行情</b></div>
+          <div class="strip-metric"><span>交易机会</span><b id="eligibleCount">—</b></div>
+          <div class="strip-metric"><span>风控状态</span><b id="strategyRiskState" class="positive">正常</b></div>
+          <div class="strip-metric wide"><span>策略模式</span><b id="strategyMode">市场中性 · Cross-Venue</b></div>
+          <button id="strategyToggle" class="danger-btn"><i class="fa-solid fa-pause"></i><span>暂停策略</span></button>
+        </section>
+        <section class="dashboard-grid">
+          <section class="surface performance-card">
+            <div class="section-heading"><div><h2>收益概览 <span>(USDT)</span></h2><p>实时模拟净值，已计入双腿费用与 Funding 估算</p></div><div class="period-tabs"><button>1D</button><button class="active">7D</button><button>30D</button></div></div>
+            <div class="performance-layout">
+              <div class="metrics-column">
+                <div class="metric-grid">
+                  <div><span>账户权益</span><strong id="accountEquity">$100,000.00</strong><small>初始权益 $100,000</small></div>
+                  <div><span>今日 PnL</span><strong id="todayPnl">$0.00</strong><small id="todayReturn">0.00%</small></div>
+                  <div><span>累计 PnL</span><strong id="totalPnl">$0.00</strong><small id="totalReturn">0.00%</small></div>
+                  <div><span>最大回撤</span><strong id="maxDrawdown">0.00%</strong><small>基于已平仓序列</small></div>
+                </div>
+                <div id="paperSummary" class="paper-summary"></div>
+                <div class="attribution"><div><span>价差收益</span><b id="spreadPnl">$0.00</b></div><div><span>Funding</span><b id="fundingPnl">$0.00</b></div><div><span>交易费用</span><b id="feePnl">$0.00</b></div></div>
+              </div>
+              <div class="chart-column"><div class="chart-title"><span>权益曲线</span><small id="chartRange">当前会话</small></div><canvas id="equityChart" width="720" height="300" aria-label="Paper 策略权益曲线"></canvas></div>
+            </div>
+          </section>
+          <aside class="surface signals-card">
+            <div class="section-heading"><div><h2>下一步信号</h2><p>自动执行或显示被阻止原因</p></div><span id="signalCount" class="count-badge">0</span></div>
+            <div id="nextSignals" class="signal-list"><div class="empty-state">正在等待行情和策略判断</div></div>
+          </aside>
+        </section>
+        <section id="positions" class="surface positions-card">
+          <div class="section-heading"><div><h2>当前持仓 <span id="openCount">(0)</span></h2><p>实时展示双腿价格、Funding、未实现 PnL 与自动退出条件</p></div><div class="positions-actions"><label>单仓名义本金 <input id="paperNotional" type="number" value="10000" step="1000" min="100" /></label><button id="clearPaperBtn" class="ghost-btn danger-text">全部平仓</button></div></div>
+          <div id="paperPositions" class="paper-list"><div class="empty-state">策略尚未建立模拟仓位</div></div>
+        </section>
+        <section class="bottom-grid">
+          <section class="surface venue-card"><div class="section-heading"><div><h2>三所市场健康度</h2><p id="universeNote">同步 Binance / Bitget / Gate</p></div><span id="connectionPill" class="status-pill status-warn"><span class="status-dot"></span>Connecting</span></div><div id="venueHealth" class="venue-health"></div><div class="universe-inline"><span><b id="universeCount">—</b> 两所以上共同</span><span><b id="tripleCount">—</b> 三所共同</span><span><b id="tradfiCount">—</b> TradFi/RWA</span></div></section>
+          <section id="risk" class="surface risk-card"><div class="section-heading"><div><h2>策略风控</h2><p>所有限制仅用于 Paper 模拟</p></div></div><div class="risk-grid"><div><span>最大持仓</span><b>3</b></div><div><span>当前持仓</span><b id="riskOpenPositions">0</b></div><div><span>最低 Edge</span><b>3.00 bp</b></div><div><span>单仓止损</span><b>0.60%</b></div></div><div class="risk-bar"><div><span>风险使用率</span><b id="riskUsageText">0%</b></div><progress id="riskUsage" max="100" value="0"></progress></div></section>
+          <section class="surface events-card"><div class="section-heading"><div><h2>策略决策日志</h2><p>自动开仓、平仓与跳过原因</p></div></div><div id="systemEvents" class="event-list"><div class="empty-state">等待策略事件</div></div></section>
+        </section>
+      </section>
+      <section id="researchView" class="workspace-page">
+        <section id="settings" class="surface controls-panel"><div class="section-heading"><div><h2>策略与研究配置</h2><p>调整后只影响 Paper 筛选和收益测算</p></div><div class="segmented" id="scopeSegment"><button data-scope="all" class="active">全部 2+ 所</button><button data-scope="triple">三所共同</button><button data-scope="tradfi">TradFi/RWA</button><button data-scope="crypto">Crypto</button><button data-scope="positive">正净 Edge</button><button data-scope="liquid">高流动性</button></div></div>
+          <div class="controls-grid"><label>搜索标的<input id="searchInput" placeholder="BTC / AAPL / NVDA..." /></label><label>最低净 Edge (bp)<input id="minEdgeInput" type="number" step="0.1" value="0" /></label><label>最低容量 (USDT)<input id="minCapacityInput" type="number" step="100" value="5000" /></label><label>Funding 时长 (h)<input id="fundingHorizonInput" type="number" step="1" value="8" min="1" /></label><label>风险缓冲 (bp)<input id="riskBufferInput" type="number" step="0.1" value="1.5" /></label><label>Binance 费率 (bp)<input id="binanceFeeInput" type="number" step="0.1" value="5" /></label><label>Bitget 费率 (bp)<input id="bitgetFeeInput" type="number" step="0.1" value="6" /></label><label>Gate 费率 (bp)<input id="gateFeeInput" type="number" step="0.1" value="7.5" /></label><label>Mark/Index 偏离 (bp)<input id="maxMarkDevInput" type="number" step="1" value="40" /></label></div>
+        </section>
+        <section id="scanner" class="surface table-panel"><div class="table-toolbar"><div><b>跨交易所机会监控</b><span id="lastUpdate">尚未更新</span><span id="visibleCount">0 个方向</span></div></div><div class="table-wrap"><table><thead><tr><th>类别</th><th>标的</th><th>方向</th><th>Long Ask</th><th>Short Bid</th><th>Spread bp</th><th>Funding Δ/h</th><th>当前 APR</th><th>历史 APR</th><th>持续性</th><th>Net Edge</th><th>容量</th><th>风险</th><th></th></tr></thead><tbody id="opportunityBody"><tr><td colspan="14" class="empty-cell">正在初始化市场数据…</td></tr></tbody></table></div></section>
+        <section class="surface"><div class="section-heading"><div><h2>Depth & Capacity Curve</h2><p>真实多档订单簿计算双腿 VWAP、填充率和费用后净 Edge</p></div></div><div id="depthCurve" class="research-list"><div class="empty-state">选择行情方向查看容量曲线</div></div></section>
+        <div class="research-grid">
+          <section class="surface"><div class="section-heading"><div><h2>Funding Carry</h2><p>持久性、分位数与回本时间</p></div><div class="segmented" id="historyWindow"><button data-window="24h">24H</button><button data-window="7d" class="active">7D</button><button data-window="30d">30D</button><button data-window="90d">90D</button></div></div><div id="fundingLeaders" class="research-list"><div class="empty-state">Funding 历史正在积累</div></div></section>
+          <section class="surface"><div class="section-heading"><div><h2>Persistent Edge</h2><p>路线可交易率、平均 Edge 与容量</p></div></div><div id="persistentRoutes" class="research-list"></div></section>
+          <section class="surface"><div class="section-heading"><div><h2>Reversal Risk</h2><p>Funding 反转频率</p></div></div><div id="reversalRisk" class="research-list"></div></section>
+          <section class="surface"><div class="section-heading"><div><h2>TradFi Carry</h2><p>股票、ETF、商品与 RWA 永续</p></div></div><div id="tradfiCarry" class="research-list"></div></section>
+          <section class="surface"><div class="section-heading"><div><h2>Settlement Calendar</h2><p>下一次 Funding 结算</p></div></div><div id="settlementCalendar" class="research-list"></div></section>
+          <section class="surface"><div class="section-heading"><div><h2>Research Coverage</h2><p>服务端样本覆盖</p></div></div><div id="researchCoverage" class="research-list"></div></section>
+          <section class="surface"><div class="section-heading"><div><h2>Carry by Session</h2><p>亚洲、欧洲、美国和隔夜时段</p></div></div><div id="sessionCarry" class="research-list"></div></section>
+          <section class="surface"><div class="section-heading"><div><h2>Venue Reliability</h2><p>历史可用率与延迟</p></div><button id="clearResearchBtn" class="ghost-btn">清空统计</button></div><div id="venueReliability" class="research-list"></div></section>
+        </div>
+      </section>
+    </main>
+    <footer><span>ArbOasis · Automatic Paper Strategy</span><span>仅模拟交易 · 不连接账户 · 不发送真实订单</span></footer>
+  </div>
 </div>
 <script type="module" src="./src/app.js"></script>
-</body></html>
+</body>
+</html>

@@ -15,6 +15,24 @@ Do not rebuild the project from scratch when continuing development. Inspect the
 
 ---
 
+# P0.5 — Strategy Product Loop
+
+Status: implemented for browser-session Paper trading.
+
+- light-theme Strategy Command Center as the default view
+- explicit running/paused state and session uptime
+- deterministic automatic Paper entry and exit rules
+- three-position cap, capacity gate, score gate and minimum net Edge
+- convergence take-profit, simulated stop-loss, Funding reversal and max-hold exits
+- live open positions, next-signal queue and decision reasons
+- equity, today/total PnL, drawdown, win rate and cost/Funding attribution
+- responsive mobile layout with Research moved to a secondary desk
+
+Always-on execution after the browser closes still requires deployment of an independent
+server-side strategy runner. Real exchange execution remains out of scope.
+
+---
+
 # P0 — Research Scanner Foundation
 
 Status: substantially implemented. REST market access now runs through a same-origin

@@ -36,9 +36,12 @@ Current v1 research scope:
 - Opportunity score
 - Local research history
 - Funding persistence statistics
-- Paper trading only
+- Automatic and manual Paper trading only
+- Strategy status, open positions, equity, drawdown and PnL attribution dashboard
 
 The browser build must never store live trading credentials or send real orders.
+The current automatic Paper strategy runs only while the dashboard is open; a future
+always-on runner belongs in the independent server-side strategy service.
 
 ## 3. User Jobs
 
@@ -97,6 +100,12 @@ Risk dimensions:
 - traditional-market open/closed state for TradFi assets
 
 ## 4. Core Product Views
+
+### Primary View — Strategy Command Center
+
+The default landing view shows whether the Paper strategy is running, current equity,
+today/total PnL, drawdown, open positions, next signals, venue health, risk usage and
+the decision log. Research statistics are secondary to operational clarity.
 
 The long-term front end should converge toward four desks rather than one giant table.
 

@@ -97,7 +97,8 @@ export function clearClosedTrades(){localStorage.removeItem(TRADE_KEY);}
 export function paperSummary(){
   const a=loadClosedTrades(); const pnl=a.reduce((s,x)=>s+(x.net||0),0); const wins=a.filter(x=>(x.net||0)>0).length;
   const hold=a.length?a.reduce((s,x)=>s+(x.closedAt-x.openedAt),0)/a.length/60000:0;
-  return {count:a.length,pnl,winRate:a.length?wins/a.length:0,avgHoldMin:hold};
+  const gross=a.reduce((s,x)=>s+(x.gross||0),0),funding=a.reduce((s,x)=>s+(x.carryEstimate||0),0),fees=a.reduce((s,x)=>s+(x.entryFees||0)+(x.exitFees||0),0);
+  return {count:a.length,pnl,winRate:a.length?wins/a.length:0,avgHoldMin:hold,gross,funding,fees};
 }
 
 function safeParse(v,fallback){try{return v?JSON.parse(v):fallback}catch{return fallback}}

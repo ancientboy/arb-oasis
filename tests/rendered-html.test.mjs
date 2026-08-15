@@ -36,4 +36,7 @@ test("renders development preview metadata", async () => {
   assert.match(dashboard, /Carry by Session/);
   assert.match(dashboard, /Venue Reliability/);
   assert.match(dashboard, /Depth &amp; Capacity Curve|Depth & Capacity Curve/);
+  assert.match(dashboard, /策略指挥中心/);
+  assert.match(dashboard, /下一步信号/);
+  assert.match(dashboard, /equityChart/);
 });
